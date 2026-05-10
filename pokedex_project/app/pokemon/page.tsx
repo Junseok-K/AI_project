@@ -55,6 +55,7 @@ interface PokemonFlavorText {
 interface PokemonSpecies {
   name: string;
   url: string;
+  generationId: number;
 }
 
 interface PokemonDetail {
@@ -73,6 +74,12 @@ interface PokemonDetail {
   genderRate: number;
   evolutionChainUrl: string;
   moves: PokemonMoveSource[];
+}
+
+interface PokemonSearchIndexEntry {
+  id: number;
+  species: PokemonSpecies;
+  name: Record<Language, string>;
 }
 
 interface PokemonMove {
@@ -110,6 +117,7 @@ const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
 const GENERATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const MAX_CONCURRENT_POKEMON_REQUESTS = 24;
 const POKEMON_BATCH_SIZE = 40;
+const generationFilterOptions = ['all', ...GENERATION_IDS] as const;
 
 const translations: Record<Language, Record<string, string>> = {
   ko: {
@@ -500,12 +508,14 @@ export default function PokemonPokedex() {
   const popupContentRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const abilityCacheRef = useRef(new Map<string, Promise<Omit<PokemonAbility, 'isHidden'>>>());
-  const nextPokemonOffsetRef = useRef(0);
+  const searchIndexCacheRef = useRef<Promise<PokemonSearchIndexEntry[]> | null>(null);
   const [pokemon, setPokemon] = useState<PokemonDetail[]>([]);
   const [pokemonSpecies, setPokemonSpecies] = useState<PokemonSpecies[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGeneration, setSelectedGeneration] = useState<number | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [selectedPokemon, setSelectedPokemon] = useState<PokemonDetail | null>(null);
   const [selectedDescriptionGeneration, setSelectedDescriptionGeneration] = useState('');
   const [evolutionChain, setEvolutionChain] = useState<EvolutionPokemon[]>([]);
@@ -516,20 +526,38 @@ export default function PokemonPokedex() {
 
   const t = (key: keyof typeof translations.ko) => translations[language][key];
 
+  const visiblePokemonSpecies = useMemo(
+    () =>
+      selectedGeneration === 'all'
+        ? pokemonSpecies
+        : pokemonSpecies.filter((species) => species.generationId === selectedGeneration),
+    [pokemonSpecies, selectedGeneration]
+  );
+
+  const visiblePokemonIdSet = useMemo(
+    () => new Set(visiblePokemonSpecies.map((species) => getPokemonIdFromSpeciesUrl(species.url))),
+    [visiblePokemonSpecies]
+  );
+
+  const visiblePokemon = useMemo(
+    () => pokemon.filter((item) => visiblePokemonIdSet.has(item.id)),
+    [pokemon, visiblePokemonIdSet]
+  );
+
   const filteredPokemon = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
     if (!normalizedSearch) {
-      return pokemon;
+      return visiblePokemon;
     }
 
-    return pokemon.filter(
+    return visiblePokemon.filter(
       (p) =>
         p.name[language].toLowerCase().includes(normalizedSearch) ||
         p.id.toString().includes(normalizedSearch) ||
         p.types.some((type) => getTypeLabel(type, language).toLowerCase().includes(normalizedSearch))
     );
-  }, [searchTerm, pokemon, language]);
+  }, [searchTerm, visiblePokemon, language]);
 
   const learnableMoves = useMemo(
     () =>
@@ -667,19 +695,46 @@ export default function PokemonPokedex() {
     };
   }, []);
 
+  const getPokemonSearchIndex = useCallback(() => {
+    if (!searchIndexCacheRef.current) {
+      searchIndexCacheRef.current = mapWithConcurrency(
+        pokemonSpecies,
+        MAX_CONCURRENT_POKEMON_REQUESTS,
+        async (species) => {
+          const pokemonId = getPokemonIdFromSpeciesUrl(species.url);
+          const response = await fetch(species.url);
+          const speciesData = await response.json();
+
+          return {
+            id: pokemonId,
+            species,
+            name: {
+              ko: getNameByLanguage(speciesData.names, 'ko', species.name),
+              en: getNameByLanguage(speciesData.names, 'en', species.name),
+              ja: getNameByLanguage(speciesData.names, 'ja', species.name),
+            },
+          };
+        }
+      );
+    }
+
+    return searchIndexCacheRef.current;
+  }, [pokemonSpecies]);
+
   const loadMorePokemon = useCallback(async () => {
-    if (loadingMore || nextPokemonOffsetRef.current >= pokemonSpecies.length) {
+    if (loadingMore) {
       return;
     }
 
-    const startIndex = nextPokemonOffsetRef.current;
-    const nextSpecies = pokemonSpecies.slice(startIndex, startIndex + POKEMON_BATCH_SIZE);
+    const loadedPokemonIds = new Set(pokemon.map((item) => item.id));
+    const nextSpecies = visiblePokemonSpecies
+      .filter((species) => !loadedPokemonIds.has(getPokemonIdFromSpeciesUrl(species.url)))
+      .slice(0, POKEMON_BATCH_SIZE);
 
     if (nextSpecies.length === 0) {
       return;
     }
 
-    nextPokemonOffsetRef.current += nextSpecies.length;
     setLoadingMore(true);
 
     try {
@@ -689,16 +744,21 @@ export default function PokemonPokedex() {
         fetchPokemonDetail
       );
 
-      setPokemon((currentPokemon) =>
-        [...currentPokemon, ...nextPokemon].sort((a, b) => a.id - b.id)
-      );
+      setPokemon((currentPokemon) => {
+        const pokemonById = new Map(currentPokemon.map((item) => [item.id, item]));
+
+        nextPokemon.forEach((item) => {
+          pokemonById.set(item.id, item);
+        });
+
+        return Array.from(pokemonById.values()).sort((a, b) => a.id - b.id);
+      });
     } catch (error) {
-      nextPokemonOffsetRef.current = startIndex;
       console.error('?ъ폆紐??곗씠??異붽? 濡쒕뱶 ?ㅽ뙣:', error);
     } finally {
       setLoadingMore(false);
     }
-  }, [fetchPokemonDetail, loadingMore, pokemonSpecies]);
+  }, [fetchPokemonDetail, loadingMore, pokemon, visiblePokemonSpecies]);
 
   useEffect(() => {
     let isMounted = true;
@@ -714,8 +774,11 @@ export default function PokemonPokedex() {
 
         const nextPokemonSpecies = Array.from(
           new Map<string, PokemonSpecies>(
-            generationData.flatMap((generation) =>
-              generation.pokemon_species.map((species: { name: string; url: string }) => [species.url, species])
+            generationData.flatMap((generation, index) =>
+              generation.pokemon_species.map((species: { name: string; url: string }) => [
+                species.url,
+                { ...species, generationId: GENERATION_IDS[index] },
+              ])
             )
           ).values()
         ).sort((a, b) => getPokemonIdFromSpeciesUrl(a.url) - getPokemonIdFromSpeciesUrl(b.url));
@@ -740,10 +803,95 @@ export default function PokemonPokedex() {
   }, []);
 
   useEffect(() => {
-    if (!loading && pokemonSpecies.length > 0 && pokemon.length === 0) {
-      loadMorePokemon();
+    if (!loading && visiblePokemonSpecies.length > 0 && visiblePokemon.length === 0) {
+      void Promise.resolve().then(loadMorePokemon);
     }
-  }, [loadMorePokemon, loading, pokemon.length, pokemonSpecies.length]);
+  }, [loadMorePokemon, loading, visiblePokemon.length, visiblePokemonSpecies.length]);
+
+  useEffect(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch || visiblePokemonSpecies.length === 0) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadSearchResults = async () => {
+      setSearchLoading(true);
+
+      try {
+        const loadedPokemonIds = new Set(pokemon.map((item) => item.id));
+        let matchedSpecies = visiblePokemonSpecies.filter((species) => {
+          const pokemonId = getPokemonIdFromSpeciesUrl(species.url);
+
+          return (
+            pokemonId.toString().includes(normalizedSearch) ||
+            species.name.toLowerCase().includes(normalizedSearch)
+          );
+        });
+
+        if (matchedSpecies.length === 0) {
+          const searchIndex = await getPokemonSearchIndex();
+
+          if (!isMounted) {
+            return;
+          }
+
+          const visibleSpeciesUrls = new Set(visiblePokemonSpecies.map((species) => species.url));
+
+          matchedSpecies = searchIndex
+            .filter(
+              (entry) =>
+                visibleSpeciesUrls.has(entry.species.url) &&
+                (entry.id.toString().includes(normalizedSearch) ||
+                  Object.values(entry.name).some((name) => name.toLowerCase().includes(normalizedSearch)))
+            )
+            .map((entry) => entry.species);
+        }
+
+        const missingSpecies = matchedSpecies.filter(
+          (species) => !loadedPokemonIds.has(getPokemonIdFromSpeciesUrl(species.url))
+        );
+
+        if (missingSpecies.length === 0) {
+          return;
+        }
+
+        const searchPokemon = await mapWithConcurrency(
+          missingSpecies,
+          MAX_CONCURRENT_POKEMON_REQUESTS,
+          fetchPokemonDetail
+        );
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPokemon((currentPokemon) => {
+          const pokemonById = new Map(currentPokemon.map((item) => [item.id, item]));
+
+          searchPokemon.forEach((item) => {
+            pokemonById.set(item.id, item);
+          });
+
+          return Array.from(pokemonById.values()).sort((a, b) => a.id - b.id);
+        });
+      } catch (error) {
+        console.error('Search results load failed:', error);
+      } finally {
+        if (isMounted) {
+          setSearchLoading(false);
+        }
+      }
+    };
+
+    loadSearchResults();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchPokemonDetail, getPokemonSearchIndex, pokemon, searchTerm, visiblePokemonSpecies]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -1373,20 +1521,54 @@ export default function PokemonPokedex() {
           {t('title')}
         </h1>
         <p className="mb-6" style={{ color: '#e0e0e0' }}>
-          {pokemonSpecies.length > 0 &&
-            `${t('totalPokemon')} ${pokemon.length} / ${pokemonSpecies.length}${t('pokemon')}`}
+          {visiblePokemonSpecies.length > 0 &&
+            `${t('totalPokemon')} ${visiblePokemon.length} / ${visiblePokemonSpecies.length}${t('pokemon')}`}
         </p>
+
+        <div className="mb-3 flex flex-wrap gap-2">
+          {generationFilterOptions.map((generation) => {
+            const isSelected = selectedGeneration === generation;
+            const label = generation === 'all' ? '전체' : `${generation}세대`;
+
+            return (
+              <button
+                key={generation}
+                type="button"
+                onClick={() => {
+                  setSelectedGeneration(generation);
+                  setSearchLoading(false);
+                }}
+                className="min-h-9 rounded-lg border px-3 text-sm font-bold transition"
+                style={{
+                  backgroundColor: isSelected ? '#007acc' : '#252526',
+                  borderColor: isSelected ? '#38bdf8' : '#3e3e42',
+                  color: isSelected ? '#ffffff' : '#e0e0e0',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
         <input
           type="text"
           placeholder={t('search')}
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            const nextSearchTerm = e.target.value;
+
+            setSearchTerm(nextSearchTerm);
+
+            if (!nextSearchTerm.trim()) {
+              setSearchLoading(false);
+            }
+          }}
           className="w-full px-4 py-2 border rounded-lg mb-6"
           style={{ backgroundColor: '#252526', borderColor: '#3e3e42', color: '#e0e0e0' }}
         />
 
-        {loading || (pokemon.length === 0 && loadingMore) ? (
+        {loading || searchLoading || (visiblePokemon.length === 0 && loadingMore) ? (
           <div className="text-center" style={{ color: '#e0e0e0' }}>
             {t('loading')}
           </div>
@@ -1439,7 +1621,7 @@ export default function PokemonPokedex() {
               )}
             </div>
 
-            {!searchTerm.trim() && pokemon.length < pokemonSpecies.length && (
+            {!searchTerm.trim() && visiblePokemon.length < visiblePokemonSpecies.length && (
               <div ref={loadMoreRef} className="py-8 text-center text-sm font-bold" style={{ color: '#e0e0e0' }}>
                 {loadingMore ? t('loading') : ''}
               </div>
