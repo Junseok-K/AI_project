@@ -117,6 +117,7 @@ const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
 const GENERATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const MAX_CONCURRENT_POKEMON_REQUESTS = 24;
 const POKEMON_BATCH_SIZE = 40;
+const LANGUAGE_STORAGE_KEY = 'pokemon-language';
 const generationFilterOptions = ['all', ...GENERATION_IDS] as const;
 
 const translations: Record<Language, Record<string, string>> = {
@@ -150,6 +151,9 @@ const translations: Record<Language, Record<string, string>> = {
     male: '수컷',
     female: '암컷',
     genderless: '성별 없음',
+    allGenerations: '전체',
+    generationSuffix: '세대',
+    noImage: '이미지 없음',
   },
   en: {
     back: '← Go back',
@@ -181,6 +185,9 @@ const translations: Record<Language, Record<string, string>> = {
     male: 'Male',
     female: 'Female',
     genderless: 'Genderless',
+    allGenerations: 'All',
+    generationSuffix: 'Gen',
+    noImage: 'No Image',
   },
   ja: {
     back: '← 戻る',
@@ -212,6 +219,9 @@ const translations: Record<Language, Record<string, string>> = {
     male: 'オス',
     female: 'メス',
     genderless: '性別なし',
+    allGenerations: 'すべて',
+    generationSuffix: '世代',
+    noImage: '画像なし',
   },
 };
 
@@ -343,6 +353,9 @@ const getNameByLanguage = (
 };
 
 const isPokemonType = (type: string): type is PokemonType => type in typeLabels;
+
+const isLanguage = (value: string | null): value is Language =>
+  value === 'ko' || value === 'en' || value === 'ja';
 
 const getTypeLabel = (type: PokemonType, language: Language) => typeLabels[type][language];
 
@@ -525,6 +538,25 @@ export default function PokemonPokedex() {
   const [language, setLanguage] = useState<Language>('ko');
 
   const t = (key: keyof typeof translations.ko) => translations[language][key];
+
+  useEffect(() => {
+    const syncLanguage = () => {
+      const savedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+
+      if (isLanguage(savedLanguage)) {
+        setLanguage(savedLanguage);
+      }
+    };
+
+    syncLanguage();
+    window.addEventListener('storage', syncLanguage);
+    window.addEventListener('pokemon-language-change', syncLanguage);
+
+    return () => {
+      window.removeEventListener('storage', syncLanguage);
+      window.removeEventListener('pokemon-language-change', syncLanguage);
+    };
+  }, []);
 
   const visiblePokemonSpecies = useMemo(
     () =>
@@ -1065,7 +1097,7 @@ export default function PokemonPokedex() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#1e1e1e' }}>
+    <div className="min-h-screen overflow-x-hidden" style={{ backgroundColor: '#1e1e1e' }}>
       {selectedPokemon && (
         <div
           className="fixed inset-0 z-40 bg-black/70"
@@ -1075,15 +1107,15 @@ export default function PokemonPokedex() {
       )}
 
       {selectedPokemon && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-2 py-3 sm:px-4 sm:py-6">
           <div
-            className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#050607]/95 shadow-2xl"
+            className="flex max-h-[94dvh] w-full max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-white/10 bg-[#050607]/95 shadow-2xl sm:max-h-[88vh] sm:rounded-2xl lg:max-w-5xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="pokemon-detail-title"
           >
-            <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.03] px-5 py-3">
+            <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-3 sm:px-5">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full bg-red-400" />
                 <span className="h-3 w-3 rounded-full bg-yellow-400" />
@@ -1101,22 +1133,22 @@ export default function PokemonPokedex() {
               </button>
             </div>
 
-            <div ref={popupContentRef} className="overflow-y-auto p-5 md:p-8">
-              <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-6">
-              <div>
+            <div ref={popupContentRef} className="overflow-x-hidden overflow-y-auto p-4 sm:p-5 md:p-8">
+              <div className="flex min-w-0 flex-col gap-4 border-b border-white/10 pb-6 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <p className="text-lg font-bold text-slate-400">
                   No.{selectedPokemon.id.toString().padStart(3, '0')}
                 </p>
                 <h2
                   id="pokemon-detail-title"
-                  className="mt-1 text-4xl font-black leading-none text-white md:text-5xl"
+                  className="mt-1 break-words text-3xl font-black leading-tight text-white sm:text-4xl md:text-5xl"
                 >
                   {selectedPokemon.name[language]}
                 </h2>
                 <p className="mt-3 text-lg font-semibold text-sky-400">{selectedPokemon.genus[language]}</p>
               </div>
 
-              <div className="flex items-start gap-5">
+              <div className="flex shrink-0 items-start gap-5 self-center sm:self-start">
                 <div className="mt-16 hidden flex-wrap justify-end gap-2 sm:flex">
                   {selectedPokemon.types.map((type) => (
                     <span
@@ -1131,14 +1163,14 @@ export default function PokemonPokedex() {
               </div>
             </div>
 
-            <div className="grid gap-8 pt-8 lg:grid-cols-[300px_1fr]">
-              <div>
-                <div className="flex h-56 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-inner">
+            <div className="grid gap-6 pt-6 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-8 lg:pt-8">
+              <div className="min-w-0">
+                <div className="flex h-48 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] shadow-inner sm:h-56 sm:rounded-2xl">
                   {selectedPokemon.image ? (
                     <img
                       src={selectedPokemon.image}
                       alt={selectedPokemon.name[language]}
-                      className="h-40 w-40 object-contain"
+                      className="h-32 w-32 object-contain sm:h-40 sm:w-40"
                     />
                   ) : (
                     <div className="text-sm text-slate-400">No Image</div>
@@ -1155,7 +1187,7 @@ export default function PokemonPokedex() {
 
                 <div className="mt-6 space-y-3">
                   {selectedPokemon.stats.map((stat) => (
-                    <div key={stat.label.en} className="grid grid-cols-[58px_42px_1fr] items-center gap-3">
+                    <div key={stat.label.en} className="grid grid-cols-[48px_38px_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[58px_42px_minmax(0,1fr)] sm:gap-3">
                       <span className="text-sm font-bold text-slate-400">{stat.label[language]}</span>
                       <span className="text-sm font-black text-white">{stat.value}</span>
                       <span className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
@@ -1245,7 +1277,7 @@ export default function PokemonPokedex() {
                   <select
                     value={selectedDescriptionGroup?.options[0].generation || ''}
                     onChange={(event) => setSelectedDescriptionGeneration(event.target.value)}
-                    className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-bold text-slate-100 outline-none transition hover:bg-white/[0.1] focus:border-sky-400/60"
+                    className="w-full max-w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-bold text-slate-100 outline-none transition hover:bg-white/[0.1] focus:border-sky-400/60 sm:w-auto"
                     style={{ colorScheme: 'dark', backgroundColor: '#111318', color: '#f8fafc' }}
                   >
                     {descriptionGroups.map((group) => (
@@ -1309,10 +1341,10 @@ export default function PokemonPokedex() {
                         {ability.isHidden && (
                           <span className="ml-2 text-xs text-violet-300/80">{t('hiddenAbility')}</span>
                         )}
-                        <span className="pointer-events-none absolute bottom-[calc(100%+10px)] left-1/2 z-20 hidden w-64 -translate-x-1/2 rounded-xl border border-white/10 bg-[#111318] px-4 py-3 text-left text-xs font-medium leading-5 text-slate-100 shadow-2xl group-hover:block group-focus:block">
+                        <span className="pointer-events-none absolute bottom-[calc(100%+10px)] left-0 z-20 hidden w-[min(16rem,calc(100vw-2rem))] rounded-xl border border-white/10 bg-[#111318] px-4 py-3 text-left text-xs font-medium leading-5 text-slate-100 shadow-2xl group-hover:block group-focus:block sm:left-1/2 sm:-translate-x-1/2">
                           <span className="mb-1 block text-sm font-black text-white">{ability.name[language]}</span>
                           {ability.description[language]}
-                          <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/10 bg-[#111318]" />
+                          <span className="absolute left-6 top-full h-3 w-3 -translate-y-1/2 rotate-45 border-b border-r border-white/10 bg-[#111318] sm:left-1/2 sm:-translate-x-1/2" />
                         </span>
                       </span>
                     ))}
@@ -1488,33 +1520,6 @@ export default function PokemonPokedex() {
           >
             {t('back')}
           </Link>
-
-          <div className="flex items-center gap-2">
-            <label style={{ color: '#e0e0e0' }} className="font-semibold">
-              {t('language')}:
-            </label>
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value as Language)}
-              className="px-3 py-2 rounded-lg font-semibold"
-              style={{
-                backgroundColor: '#252526',
-                borderColor: '#3e3e42',
-                color: '#e0e0e0',
-                colorScheme: 'dark',
-              }}
-            >
-              <option value="ko" style={{ backgroundColor: '#252526', color: '#e0e0e0' }}>
-                한국어
-              </option>
-              <option value="en" style={{ backgroundColor: '#252526', color: '#e0e0e0' }}>
-                English
-              </option>
-              <option value="ja" style={{ backgroundColor: '#252526', color: '#e0e0e0' }}>
-                日本語
-              </option>
-            </select>
-          </div>
         </div>
 
         <h1 className="text-4xl font-bold mb-2" style={{ color: '#ce9178' }}>
@@ -1528,7 +1533,8 @@ export default function PokemonPokedex() {
         <div className="mb-3 flex flex-wrap gap-2">
           {generationFilterOptions.map((generation) => {
             const isSelected = selectedGeneration === generation;
-            const label = generation === 'all' ? '전체' : `${generation}세대`;
+            const label =
+              generation === 'all' ? t('allGenerations') : `${generation}${t('generationSuffix')}`;
 
             return (
               <button
@@ -1591,7 +1597,7 @@ export default function PokemonPokedex() {
                           className="w-20 h-20 rounded flex items-center justify-center text-xs"
                           style={{ backgroundColor: '#3e3e42', color: '#e0e0e0' }}
                         >
-                          No Image
+                          {t('noImage')}
                         </div>
                       )}
                     </div>
