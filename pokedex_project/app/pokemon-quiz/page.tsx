@@ -61,7 +61,9 @@ export default function PokemonQuizPage() {
               </div>
 
               <div className="flex min-h-20 items-center justify-between px-5 py-4">
-                <h2 className="text-2xl font-bold text-white">{map.region}</h2>
+                <h2 className="text-2xl font-bold text-white">
+                  {map.region.endsWith('지방') ? map.region : `${map.region} 지방`}
+                </h2>
                 <span className="text-2xl font-bold text-[#007acc] transition group-hover:translate-x-1">
                   &gt;
                 </span>
