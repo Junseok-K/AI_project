@@ -341,6 +341,8 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [language, setLanguage] = useState<Language>('ko');
+  const [inputFocused, setInputFocused] = useState(false);
+  const [visualViewportHeight, setVisualViewportHeight] = useState<number | null>(null);
 
   const currentQuestion = questions[currentIndex];
   const isFinished = questions.length > 0 && currentIndex >= questions.length;
@@ -371,6 +373,23 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     return () => {
       window.removeEventListener('storage', syncLanguage);
       window.removeEventListener('pokemon-language-change', syncLanguage);
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      setVisualViewportHeight(window.visualViewport?.height || window.innerHeight);
+    };
+
+    updateViewportHeight();
+    window.visualViewport?.addEventListener('resize', updateViewportHeight);
+    window.visualViewport?.addEventListener('scroll', updateViewportHeight);
+    window.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight);
+      window.visualViewport?.removeEventListener('scroll', updateViewportHeight);
+      window.removeEventListener('resize', updateViewportHeight);
     };
   }, []);
 
@@ -452,6 +471,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
       setFeedback(`오답입니다. 정답은 ${currentQuestion.displayName}입니다.`);
     }
 
+    setInputFocused(false);
     setAnswered(true);
     window.setTimeout(() => {
       goToNextQuestion();
@@ -512,9 +532,16 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   }
 
   return (
-    <div className="h-dvh overflow-hidden bg-[#1e1e1e] px-3 py-3 text-[#e0e0e0] sm:min-h-screen sm:overflow-x-hidden sm:px-4 sm:py-8">
+    <div
+      className="fixed inset-0 overflow-hidden bg-[#1e1e1e] px-3 py-2 text-[#e0e0e0] sm:static sm:min-h-screen sm:overflow-x-hidden sm:px-4 sm:py-8"
+      style={{ height: visualViewportHeight ? `${visualViewportHeight}px` : '100dvh' }}
+    >
       <main className="mx-auto flex h-full w-full max-w-5xl flex-col">
-        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 sm:mb-8 sm:gap-3">
+        <div
+          className={`mb-2 shrink-0 flex-wrap items-center justify-between gap-2 sm:mb-8 sm:flex sm:gap-3 ${
+            inputFocused ? 'hidden' : 'flex'
+          }`}
+        >
           <a
             href={`/pokemon-quiz/${region}`}
             className="rounded-lg bg-[#007acc] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80 sm:px-4 sm:text-base"
@@ -528,8 +555,12 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
 
         {currentQuestion && (
           <section className="min-h-0 flex-1 overflow-hidden rounded-lg border border-white/10 bg-[#252526] p-3 sm:p-8">
-            <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[320px_1fr] lg:gap-8">
-              <div className="flex h-24 items-center justify-center rounded-lg bg-[#111318] p-2 sm:min-h-72 sm:p-6">
+            <div className="grid h-full min-h-0 gap-2 lg:grid-cols-[320px_1fr] lg:gap-8">
+              <div
+                className={`h-20 items-center justify-center rounded-lg bg-[#111318] p-2 sm:flex sm:min-h-72 sm:p-6 ${
+                  inputFocused ? 'hidden' : 'flex'
+                }`}
+              >
                 {answered && currentQuestion.image ? (
                   <img
                     src={currentQuestion.image}
@@ -551,9 +582,15 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
               </div>
 
               <div className="flex min-h-0 flex-col">
-                <h1 className="shrink-0 text-xl font-bold text-[#ce9178] sm:text-3xl">어떤 포켓몬일까요?</h1>
+                <h1
+                  className={`shrink-0 text-xl font-bold text-[#ce9178] sm:block sm:text-3xl ${
+                    inputFocused ? 'hidden' : 'block'
+                  }`}
+                >
+                  어떤 포켓몬일까요?
+                </h1>
 
-                <div className="mt-3 grid min-h-0 gap-2 overflow-hidden sm:mt-6 sm:gap-4">
+                <div className="grid min-h-0 gap-2 overflow-hidden sm:mt-6 sm:gap-4">
                   {hintVisibility.cry && (
                     <button
                       type="button"
@@ -637,6 +674,8 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                     type="text"
                     value={answer}
                     onChange={(event) => setAnswer(event.target.value)}
+                    onFocus={() => setInputFocused(true)}
+                    onBlur={() => setInputFocused(false)}
                     disabled={answered}
                     placeholder="정답 입력"
                     autoFocus
