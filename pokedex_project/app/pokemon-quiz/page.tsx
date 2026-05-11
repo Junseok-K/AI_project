@@ -26,7 +26,6 @@ export default function PokemonQuizPage() {
 
         <header className="mb-8">
           <h1 className="text-4xl font-bold text-[#ce9178]">포켓몬 퀴즈</h1>
-          <p className="mt-3 text-lg text-[#bdbdbd]">퀴즈를 풀 세대별 지도를 선택하세요.</p>
         </header>
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
