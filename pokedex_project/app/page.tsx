@@ -79,7 +79,7 @@ export default function Home() {
         <div className="flex w-full max-w-xs flex-col gap-3">
           <a
             href="/pokemon"
-            className="rounded-lg bg-[#ce9178] px-6 py-3 text-center font-semibold text-white transition-opacity hover:opacity-80"
+            className="rounded-lg bg-[#007acc] px-6 py-3 text-center font-semibold text-white transition-opacity hover:opacity-80"
           >
             {t.pokedex}
           </a>
