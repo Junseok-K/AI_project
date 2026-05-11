@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 type Difficulty = 'beginner' | 'intermediate' | 'expert';
 type Language = 'ko' | 'en' | 'ja';
@@ -327,6 +327,7 @@ const getQuestionPool = async (region: string) => {
 };
 
 export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameProps) {
+  const answerInputRef = useRef<HTMLInputElement>(null);
   const selectedDifficulty = (['beginner', 'intermediate', 'expert'].includes(difficulty)
     ? difficulty
     : 'beginner') as Difficulty;
@@ -413,6 +414,20 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     };
   }, [region, language]);
 
+  useEffect(() => {
+    if (!currentQuestion || answered) {
+      return;
+    }
+
+    const focusTimer = window.setTimeout(() => {
+      answerInputRef.current?.focus({ preventScroll: true });
+    }, 100);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+    };
+  }, [currentQuestion, answered]);
+
   const playCry = () => {
     if (!currentQuestion?.cry) {
       return;
@@ -497,12 +512,12 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#1e1e1e] px-4 py-8 text-[#e0e0e0]">
-      <main className="mx-auto w-full max-w-5xl">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+    <div className="h-dvh overflow-hidden bg-[#1e1e1e] px-3 py-3 text-[#e0e0e0] sm:min-h-screen sm:overflow-x-hidden sm:px-4 sm:py-8">
+      <main className="mx-auto flex h-full w-full max-w-5xl flex-col">
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 sm:mb-8 sm:gap-3">
           <a
             href={`/pokemon-quiz/${region}`}
-            className="rounded-lg bg-[#007acc] px-4 py-2 font-semibold text-white transition-opacity hover:opacity-80"
+            className="rounded-lg bg-[#007acc] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80 sm:px-4 sm:text-base"
           >
             난이도 선택으로 돌아가기
           </a>
@@ -512,39 +527,39 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
         </div>
 
         {currentQuestion && (
-          <section className="rounded-lg border border-white/10 bg-[#252526] p-5 sm:p-8">
-            <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
-              <div className="flex min-h-72 items-center justify-center rounded-lg bg-[#111318] p-6">
+          <section className="min-h-0 flex-1 overflow-hidden rounded-lg border border-white/10 bg-[#252526] p-3 sm:p-8">
+            <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[320px_1fr] lg:gap-8">
+              <div className="flex h-24 items-center justify-center rounded-lg bg-[#111318] p-2 sm:min-h-72 sm:p-6">
                 {answered && currentQuestion.image ? (
                   <img
                     src={currentQuestion.image}
                     alt={currentQuestion.displayName}
-                    className="h-64 w-64 object-contain transition duration-300"
+                    className="h-20 w-20 object-contain transition duration-300 sm:h-64 sm:w-64"
                   />
                 ) : hintVisibility.silhouette && currentQuestion.image ? (
                   <img
                     src={currentQuestion.image}
                     alt="포켓몬 실루엣"
-                    className="h-64 w-64 object-contain transition duration-300"
+                    className="h-20 w-20 object-contain transition duration-300 sm:h-64 sm:w-64"
                     style={{ filter: 'brightness(0)' }}
                   />
                 ) : (
-                  <div className="text-center text-lg font-bold text-[#858585]">
+                  <div className="text-center text-sm font-bold text-[#858585] sm:text-lg">
                     정답 제출 후 포켓몬이 공개됩니다.
                   </div>
                 )}
               </div>
 
-              <div>
-                <h1 className="text-3xl font-bold text-[#ce9178]">어떤 포켓몬일까요?</h1>
+              <div className="flex min-h-0 flex-col">
+                <h1 className="shrink-0 text-xl font-bold text-[#ce9178] sm:text-3xl">어떤 포켓몬일까요?</h1>
 
-                <div className="mt-6 grid gap-4">
+                <div className="mt-3 grid min-h-0 gap-2 overflow-hidden sm:mt-6 sm:gap-4">
                   {hintVisibility.cry && (
                     <button
                       type="button"
                       onClick={playCry}
                       disabled={!currentQuestion.cry}
-                      className="inline-flex h-12 w-fit items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50 sm:h-12 sm:gap-3 sm:px-4"
                     >
                       <span>🔊</span>
                       울음소리 재생
@@ -553,12 +568,12 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
 
                   {hintVisibility.types && (
                     <div>
-                      <p className="mb-2 text-sm font-bold text-[#858585]">타입</p>
+                      <p className="mb-1 text-xs font-bold text-[#858585] sm:mb-2 sm:text-sm">타입</p>
                       <div className="flex flex-wrap gap-2">
                         {currentQuestion.types.map((type) => (
                           <span
                             key={type}
-                            className="rounded px-3 py-1 text-sm font-bold text-white"
+                            className="rounded px-2 py-1 text-xs font-bold text-white sm:px-3 sm:text-sm"
                             style={{ backgroundColor: typeColors[type] }}
                           >
                             {typeLabels[type]}
@@ -569,20 +584,20 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                   )}
 
                   <div>
-                    <p className="mb-2 text-sm font-bold text-[#858585]">설명</p>
-                    <p className="rounded-lg bg-white/[0.05] px-4 py-3 leading-7 text-white">
+                    <p className="mb-1 text-xs font-bold text-[#858585] sm:mb-2 sm:text-sm">설명</p>
+                    <p className="max-h-16 overflow-hidden rounded-lg bg-white/[0.05] px-3 py-2 text-sm leading-5 text-white sm:max-h-none sm:px-4 sm:py-3 sm:text-base sm:leading-7">
                       {currentQuestion.description}
                     </p>
                   </div>
 
                   {hintVisibility.abilities && (
                     <div>
-                      <p className="mb-2 text-sm font-bold text-[#858585]">특성</p>
+                      <p className="mb-1 text-xs font-bold text-[#858585] sm:mb-2 sm:text-sm">특성</p>
                       <div className="flex flex-wrap gap-2">
                         {currentQuestion.abilities.map((ability) => (
                           <span
                             key={`${ability.name}-${ability.isHidden}`}
-                            className={`group relative cursor-help rounded-lg border px-4 py-2 text-sm font-bold ${
+                            className={`group relative cursor-help rounded-lg border px-3 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm ${
                               ability.isHidden
                                 ? 'border-violet-400/30 bg-violet-500/10 text-violet-200'
                                 : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
@@ -604,26 +619,28 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
 
                   {hintVisibility.size && (
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg bg-white/[0.05] px-4 py-3">
-                        <p className="text-sm font-bold text-[#858585]">키</p>
-                        <p className="mt-1 text-xl font-bold text-white">{currentQuestion.height.toFixed(1)} m</p>
+                      <div className="rounded-lg bg-white/[0.05] px-3 py-2 sm:px-4 sm:py-3">
+                        <p className="text-xs font-bold text-[#858585] sm:text-sm">키</p>
+                        <p className="mt-1 text-base font-bold text-white sm:text-xl">{currentQuestion.height.toFixed(1)} m</p>
                       </div>
-                      <div className="rounded-lg bg-white/[0.05] px-4 py-3">
-                        <p className="text-sm font-bold text-[#858585]">몸무게</p>
-                        <p className="mt-1 text-xl font-bold text-white">{currentQuestion.weight.toFixed(1)} kg</p>
+                      <div className="rounded-lg bg-white/[0.05] px-3 py-2 sm:px-4 sm:py-3">
+                        <p className="text-xs font-bold text-[#858585] sm:text-sm">몸무게</p>
+                        <p className="mt-1 text-base font-bold text-white sm:text-xl">{currentQuestion.weight.toFixed(1)} kg</p>
                       </div>
                     </div>
                   )}
                 </div>
 
-                <form onSubmit={submitAnswer} className="mt-7 flex gap-2">
+                <form onSubmit={submitAnswer} className="mt-3 flex shrink-0 gap-2 sm:mt-7">
                   <input
+                    ref={answerInputRef}
                     type="text"
                     value={answer}
                     onChange={(event) => setAnswer(event.target.value)}
                     disabled={answered}
                     placeholder="정답 입력"
-                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
+                    autoFocus
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-base font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
                   />
                   <button
                     type="submit"
@@ -636,7 +653,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                 </form>
 
                 {feedback && (
-                  <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.05] px-4 py-3">
+                  <div className="mt-2 shrink-0 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 sm:mt-4 sm:px-4 sm:py-3">
                     <p className="font-bold text-white">{feedback}</p>
                   </div>
                 )}
