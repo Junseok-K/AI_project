@@ -1,8 +1,9 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 
-type Difficulty = 'beginner' | 'intermediate' | 'expert';
+type Difficulty = 'beginner' | 'intermediate' | 'expert' | 'silhouette';
+type HintKey = 'silhouette' | 'cry' | 'types' | 'stats' | 'gender' | 'abilities' | 'size' | 'evolution';
 type Language = 'ko' | 'en' | 'ja';
 type PokemonType =
   | 'normal'
@@ -35,6 +36,34 @@ interface QuizAbility {
   isHidden: boolean;
 }
 
+interface QuizStat {
+  label: Record<Language, string>;
+  value: number;
+}
+
+interface QuizEvolutionPokemon {
+  id: number;
+  name: string;
+  sprite: string;
+  types: PokemonType[];
+  minLevel?: number;
+}
+
+interface QuizFlavorText {
+  version: string;
+  generation: string;
+  generationLabel: Record<Language, string>;
+  versionLabel: Record<Language, string>;
+  order: number;
+  text: string;
+}
+
+interface EvolutionNode {
+  species: { name: string; url: string };
+  evolves_to: EvolutionNode[];
+  evolution_details: Array<{ min_level: number | null }>;
+}
+
 interface QuizPokemon {
   id: number;
   names: string[];
@@ -42,8 +71,11 @@ interface QuizPokemon {
   image: string;
   cry: string;
   types: PokemonType[];
-  description: string;
+  descriptions: QuizFlavorText[];
   abilities: QuizAbility[];
+  stats: QuizStat[];
+  genderRate: number;
+  evolutionChain: QuizEvolutionPokemon[];
   height: number;
   weight: number;
 }
@@ -56,6 +88,13 @@ interface PokemonQuizGameProps {
 const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
 const QUESTION_COUNT = 20;
 const LANGUAGE_STORAGE_KEY = 'pokemon-language';
+
+const initialHintsByDifficulty: Record<Difficulty, HintKey[]> = {
+  beginner: ['silhouette', 'cry', 'types', 'stats', 'gender', 'abilities', 'size', 'evolution'],
+  intermediate: ['cry', 'abilities', 'size'],
+  expert: ['size'],
+  silhouette: ['silhouette'],
+};
 
 const regionNames: Record<string, string> = {
   all: '전체 지방',
@@ -87,27 +126,28 @@ const difficultyLabels: Record<Difficulty, string> = {
   beginner: '초보',
   intermediate: '중수',
   expert: '고수',
+  silhouette: '뭘까요?',
 };
 
-const typeLabels: Record<PokemonType, string> = {
-  normal: '노말',
-  fire: '불꽃',
-  water: '물',
-  electric: '전기',
-  grass: '풀',
-  ice: '얼음',
-  fighting: '격투',
-  poison: '독',
-  ground: '땅',
-  flying: '비행',
-  psychic: '에스퍼',
-  bug: '벌레',
-  rock: '바위',
-  ghost: '고스트',
-  dragon: '드래곤',
-  dark: '악',
-  steel: '강철',
-  fairy: '페어리',
+const typeLabels: Record<PokemonType, Record<Language, string>> = {
+  normal: { ko: '노말', en: 'Normal', ja: 'ノーマル' },
+  fire: { ko: '불꽃', en: 'Fire', ja: 'ほのお' },
+  water: { ko: '물', en: 'Water', ja: 'みず' },
+  electric: { ko: '전기', en: 'Electric', ja: 'でんき' },
+  grass: { ko: '풀', en: 'Grass', ja: 'くさ' },
+  ice: { ko: '얼음', en: 'Ice', ja: 'こおり' },
+  fighting: { ko: '격투', en: 'Fighting', ja: 'かくとう' },
+  poison: { ko: '독', en: 'Poison', ja: 'どく' },
+  ground: { ko: '땅', en: 'Ground', ja: 'じめん' },
+  flying: { ko: '비행', en: 'Flying', ja: 'ひこう' },
+  psychic: { ko: '에스퍼', en: 'Psychic', ja: 'エスパー' },
+  bug: { ko: '벌레', en: 'Bug', ja: 'むし' },
+  rock: { ko: '바위', en: 'Rock', ja: 'いわ' },
+  ghost: { ko: '고스트', en: 'Ghost', ja: 'ゴースト' },
+  dragon: { ko: '드래곤', en: 'Dragon', ja: 'ドラゴン' },
+  dark: { ko: '악', en: 'Dark', ja: 'あく' },
+  steel: { ko: '강철', en: 'Steel', ja: 'はがね' },
+  fairy: { ko: '페어리', en: 'Fairy', ja: 'フェアリー' },
 };
 
 const typeColors: Record<PokemonType, string> = {
@@ -129,6 +169,15 @@ const typeColors: Record<PokemonType, string> = {
   dark: '#5a5465',
   steel: '#5a8ea2',
   fairy: '#ec8fe6',
+};
+
+const statLabels: Record<string, Record<Language, string>> = {
+  hp: { ko: 'HP', en: 'HP', ja: 'HP' },
+  attack: { ko: '공격', en: 'Attack', ja: 'こうげき' },
+  defense: { ko: '방어', en: 'Defense', ja: 'ぼうぎょ' },
+  'special-attack': { ko: '특공', en: 'Sp. Atk', ja: 'とくこう' },
+  'special-defense': { ko: '특방', en: 'Sp. Def', ja: 'とくぼう' },
+  speed: { ko: '스피드', en: 'Speed', ja: 'すばやさ' },
 };
 
 const versionOrder: Record<string, number> = {
@@ -171,10 +220,64 @@ const versionOrder: Record<string, number> = {
   violet: 902,
 };
 
+const getVersionGeneration = (order: number) => `gen${Math.floor(order / 100)}`;
+
+const getGenerationLabel = (generation: string, language: Language) => {
+  const generationNumber = generation.replace('gen', '');
+  const labels: Record<Language, string> = {
+    ko: `${generationNumber}세대`,
+    en: `Generation ${generationNumber}`,
+    ja: `第${generationNumber}世代`,
+  };
+
+  return labels[language];
+};
+
+const getVersionLabel = (version: string) => version.replaceAll('-', ' ');
+
 const normalizeAnswer = (value: string) =>
   value.toLowerCase().replace(/[.\s_\-']/g, '').trim();
 
 const cleanText = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+const getTypeStyle = (type: PokemonType) => ({
+  backgroundColor: typeColors[type],
+  color: type === 'electric' || type === 'ice' || type === 'fairy' ? '#1f2933' : '#ffffff',
+});
+
+const getPokemonIdFromSpeciesUrl = (url: string) => {
+  const parts = url.split('/').filter(Boolean);
+  return Number(parts[parts.length - 1]);
+};
+
+const getGenderRatio = (genderRate: number) => {
+  if (genderRate === -1) {
+    return null;
+  }
+
+  const female = genderRate * 12.5;
+
+  return {
+    female,
+    male: 100 - female,
+  };
+};
+
+const formatGenderPercent = (value: number) => `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+
+const flattenEvolutionChain = (node: EvolutionNode, minLevel?: number): Array<{ id: number; minLevel?: number }> => {
+  const current = {
+    id: getPokemonIdFromSpeciesUrl(node.species.url),
+    minLevel,
+  };
+
+  return [
+    current,
+    ...node.evolves_to.flatMap((child) =>
+      flattenEvolutionChain(child, child.evolution_details[0]?.min_level || undefined)
+    ),
+  ];
+};
 
 const isLanguage = (value: string | null): value is Language =>
   value === 'ko' || value === 'en' || value === 'ja';
@@ -198,27 +301,52 @@ const getLocalizedName = (
   names?.find((entry) => entry.language.name === 'en')?.name ||
   fallback;
 
-const getRecentDescription = (
+const buildFlavorTexts = (
   entries: Array<{ flavor_text: string; language: { name: string }; version: { name: string } }>,
   language: Language
 ) => {
-  const languageEntries = entries.filter((entry) =>
-    getPokeApiLanguageNames(language).includes(entry.language.name)
-  );
-  const fallbackEntries = entries.filter((entry) => entry.language.name === 'en');
+  const descriptionsByVersion = new Map<string, QuizFlavorText>();
+  const languageNames = getPokeApiLanguageNames(language);
 
-  const sortedEntries = [...(languageEntries.length > 0 ? languageEntries : fallbackEntries)].sort((a, b) => {
-    const orderDiff = (versionOrder[b.version.name] || 0) - (versionOrder[a.version.name] || 0);
+  entries.forEach((entry) => {
+    const order = versionOrder[entry.version.name];
 
-    if (orderDiff !== 0) {
-      return orderDiff;
+    if (!order || !languageNames.includes(entry.language.name)) {
+      return;
     }
 
-    return getPokeApiLanguageNames(language).includes(a.language.name) ? -1 : 1;
+    const generation = getVersionGeneration(order);
+
+    descriptionsByVersion.set(entry.version.name, {
+      version: entry.version.name,
+      generation,
+      generationLabel: {
+        ko: getGenerationLabel(generation, 'ko'),
+        en: getGenerationLabel(generation, 'en'),
+        ja: getGenerationLabel(generation, 'ja'),
+      },
+      versionLabel: {
+        ko: getVersionLabel(entry.version.name),
+        en: getVersionLabel(entry.version.name),
+        ja: getVersionLabel(entry.version.name),
+      },
+      order,
+      text: cleanText(entry.flavor_text),
+    });
   });
 
-  return cleanText(sortedEntries[0]?.flavor_text || '설명 정보가 없습니다.');
+  if (descriptionsByVersion.size === 0 && language !== 'en') {
+    return buildFlavorTexts(entries, 'en');
+  }
+
+  return Array.from(descriptionsByVersion.values()).sort((a, b) => a.order - b.order);
 };
+
+const getDefaultDescriptionGeneration = (descriptions: QuizFlavorText[]) =>
+  descriptions.find((description) => description.version === 'scarlet')?.generation ||
+  descriptions.find((description) => description.version === 'violet')?.generation ||
+  [...descriptions].sort((a, b) => b.order - a.order)[0]?.generation ||
+  '';
 
 const getLocalizedAbilityDescription = (
   abilityData: { flavor_text_entries?: Array<{ flavor_text: string; language: { name: string } }> },
@@ -256,6 +384,33 @@ const fetchJson = async <T,>(url: string): Promise<T> => {
   return response.json();
 };
 
+const buildEvolutionChain = async (evolutionChainUrl: string, language: Language): Promise<QuizEvolutionPokemon[]> => {
+  const evolutionData = await fetchJson<{ chain: EvolutionNode }>(evolutionChainUrl);
+  const stages = flattenEvolutionChain(evolutionData.chain);
+
+  return Promise.all(
+    stages.map(async (stage) => {
+      const [pokemonData, speciesData] = await Promise.all([
+        fetchJson<{
+          types: Array<{ type: { name: PokemonType } }>;
+          sprites: { other?: { 'official-artwork'?: { front_default?: string } }; front_default?: string };
+        }>(`${POKEAPI_BASE_URL}/pokemon/${stage.id}/`),
+        fetchJson<{ names: Array<{ language: { name: string }; name: string }>; name: string }>(
+          `${POKEAPI_BASE_URL}/pokemon-species/${stage.id}/`
+        ),
+      ]);
+
+      return {
+        id: stage.id,
+        name: getLocalizedName(speciesData.names, language, speciesData.name),
+        sprite: pokemonData.sprites.other?.['official-artwork']?.front_default || pokemonData.sprites.front_default || '',
+        types: pokemonData.types.map((entry) => entry.type.name),
+        minLevel: stage.minLevel,
+      };
+    })
+  );
+};
+
 const buildQuizPokemon = async (speciesResource: NamedApiResource, language: Language): Promise<QuizPokemon> => {
   const species = await fetchJson<{
     id: number;
@@ -266,6 +421,8 @@ const buildQuizPokemon = async (speciesResource: NamedApiResource, language: Lan
       language: { name: string };
       version: { name: string };
     }>;
+    gender_rate: number;
+    evolution_chain: { url: string };
     varieties: Array<{ is_default: boolean; pokemon: NamedApiResource }>;
   }>(speciesResource.url);
   const defaultPokemon = species.varieties.find((variety) => variety.is_default)?.pokemon || species.varieties[0].pokemon;
@@ -277,9 +434,10 @@ const buildQuizPokemon = async (speciesResource: NamedApiResource, language: Lan
     sprites: { other?: { 'official-artwork'?: { front_default?: string } }; front_default?: string };
     types: Array<{ type: { name: PokemonType } }>;
     abilities: Array<{ ability: NamedApiResource; is_hidden: boolean }>;
+    stats: Array<{ base_stat: number; stat: { name: string } }>;
   }>(defaultPokemon.url);
-  const abilities = await Promise.all(
-    pokemon.abilities.map(async ({ ability, is_hidden }) => {
+  const [abilities, evolutionChain] = await Promise.all([
+    Promise.all(pokemon.abilities.map(async ({ ability, is_hidden }) => {
       const abilityData = await fetchJson<{
         names: Array<{ language: { name: string }; name: string }>;
         flavor_text_entries?: Array<{ flavor_text: string; language: { name: string } }>;
@@ -290,8 +448,9 @@ const buildQuizPokemon = async (speciesResource: NamedApiResource, language: Lan
         description: getLocalizedAbilityDescription(abilityData, language),
         isHidden: is_hidden,
       };
-    })
-  );
+    })),
+    buildEvolutionChain(species.evolution_chain.url, language),
+  ]);
   const displayName = getLocalizedName(species.names, language, species.name);
   const answerNames = [
     displayName,
@@ -308,8 +467,18 @@ const buildQuizPokemon = async (speciesResource: NamedApiResource, language: Lan
     image: pokemon.sprites.other?.['official-artwork']?.front_default || pokemon.sprites.front_default || '',
     cry: pokemon.cries?.latest || pokemon.cries?.legacy || '',
     types: pokemon.types.map((entry) => entry.type.name),
-    description: getRecentDescription(species.flavor_text_entries, language),
+    descriptions: buildFlavorTexts(species.flavor_text_entries, language),
     abilities,
+    stats: pokemon.stats.map((stat) => ({
+      label: statLabels[stat.stat.name] || {
+        ko: stat.stat.name,
+        en: stat.stat.name,
+        ja: stat.stat.name,
+      },
+      value: stat.base_stat,
+    })),
+    genderRate: species.gender_rate,
+    evolutionChain,
     height: pokemon.height / 10,
     weight: pokemon.weight / 10,
   };
@@ -327,8 +496,7 @@ const getQuestionPool = async (region: string) => {
 };
 
 export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameProps) {
-  const answerInputRef = useRef<HTMLInputElement>(null);
-  const selectedDifficulty = (['beginner', 'intermediate', 'expert'].includes(difficulty)
+  const selectedDifficulty = (['beginner', 'intermediate', 'expert', 'silhouette'].includes(difficulty)
     ? difficulty
     : 'beginner') as Difficulty;
   const regionName = regionNames[region] || '포켓몬';
@@ -340,23 +508,67 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   const [answered, setAnswered] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [language, setLanguage] = useState<Language>('ko');
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window === 'undefined') {
+      return 'ko';
+    }
+
+    const savedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return isLanguage(savedLanguage) ? savedLanguage : 'ko';
+  });
   const [inputFocused, setInputFocused] = useState(false);
+  const [selectedDescriptionGeneration, setSelectedDescriptionGeneration] = useState('');
+  const [revealedHints, setRevealedHints] = useState<HintKey[]>([]);
 
   const currentQuestion = questions[currentIndex];
   const isFinished = questions.length > 0 && currentIndex >= questions.length;
+  const isSilhouetteOnly = selectedDifficulty === 'silhouette';
 
-  const hintVisibility = useMemo(
-    () => ({
-      silhouette: selectedDifficulty === 'beginner',
-      cry: selectedDifficulty !== 'expert',
-      types: selectedDifficulty === 'beginner',
-      description: true,
-      abilities: selectedDifficulty !== 'expert',
-      size: true,
-    }),
-    [selectedDifficulty]
+  const descriptionGroups = useMemo(() => {
+    if (!currentQuestion) {
+      return [];
+    }
+
+    return Object.values(
+      currentQuestion.descriptions.reduce<Record<string, { label: string; options: QuizFlavorText[] }>>(
+        (groups, description) => {
+          if (!groups[description.generation]) {
+            groups[description.generation] = {
+              label: description.generationLabel[language],
+              options: [],
+            };
+          }
+
+          groups[description.generation].options.push(description);
+          return groups;
+        },
+        {}
+      )
+    ).sort((a, b) => a.options[0].order - b.options[0].order);
+  }, [currentQuestion, language]);
+
+  const selectedDescriptionGroup = useMemo(
+    () =>
+      descriptionGroups.find((group) => group.options[0].generation === selectedDescriptionGeneration) ||
+      descriptionGroups.find(
+        (group) =>
+          currentQuestion &&
+          group.options[0].generation === getDefaultDescriptionGeneration(currentQuestion.descriptions)
+      ) ||
+      descriptionGroups[0] ||
+      null,
+    [currentQuestion, descriptionGroups, selectedDescriptionGeneration]
   );
+
+  const isInitialHint = (hint: HintKey) => initialHintsByDifficulty[selectedDifficulty].includes(hint);
+  const isHintVisible = (hint: HintKey) => answered || isInitialHint(hint) || revealedHints.includes(hint);
+  const revealHint = (hint: HintKey) => {
+    setRevealedHints((currentHints) => (currentHints.includes(hint) ? currentHints : [...currentHints, hint]));
+  };
+  const getRevealStyle = (hint: HintKey) =>
+    !answered && !isInitialHint(hint) && revealedHints.includes(hint)
+      ? ({ animation: 'quizHintReveal 1s ease both' } as const)
+      : undefined;
 
   useEffect(() => {
     const syncLanguage = () => {
@@ -396,6 +608,8 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
           setFeedback('');
           setScore(0);
           setAnswered(false);
+          setSelectedDescriptionGeneration(getDefaultDescriptionGeneration(loadedQuestions[0]?.descriptions || []));
+          setRevealedHints([]);
         }
       } catch {
         if (isActive) {
@@ -415,26 +629,14 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     };
   }, [region, language]);
 
-  useEffect(() => {
-    if (!currentQuestion || answered) {
-      return;
-    }
-
-    const focusTimer = window.setTimeout(() => {
-      answerInputRef.current?.focus({ preventScroll: true });
-    }, 100);
-
-    return () => {
-      window.clearTimeout(focusTimer);
-    };
-  }, [currentQuestion, answered]);
-
   const playCry = () => {
     if (!currentQuestion?.cry) {
       return;
     }
 
-    new Audio(currentQuestion.cry).play();
+    const audio = new Audio(currentQuestion.cry);
+    audio.volume = 0.7;
+    audio.play().catch(() => undefined);
   };
 
   const submitAnswer = (event?: FormEvent<HTMLFormElement>) => {
@@ -461,7 +663,12 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   };
 
   const goToNextQuestion = () => {
-    setCurrentIndex((index) => index + 1);
+    setCurrentIndex((index) => {
+      const nextIndex = index + 1;
+      setSelectedDescriptionGeneration(getDefaultDescriptionGeneration(questions[nextIndex]?.descriptions || []));
+      setRevealedHints([]);
+      return nextIndex;
+    });
     setAnswer('');
     setFeedback('');
     setAnswered(false);
@@ -534,156 +741,406 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
 
         {currentQuestion && (
           <section
-            className={`min-h-0 flex-1 overflow-hidden rounded-lg border border-white/10 bg-[#252526] p-3 sm:p-8 ${
-              inputFocused ? 'flex flex-col justify-end' : ''
+            className={`min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-[#050607]/95 shadow-2xl sm:rounded-2xl ${
+              inputFocused ? 'flex flex-col justify-end p-3 sm:block sm:p-0' : ''
             }`}
           >
             <div
-              className={`grid min-h-0 gap-2 lg:grid-cols-[320px_1fr] lg:gap-8 ${
-                inputFocused ? 'h-auto w-full' : 'h-full'
+              className={`border-b border-white/10 bg-white/[0.03] px-4 py-3 sm:px-5 ${
+                inputFocused ? 'hidden sm:block' : 'block'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 sm:text-sm">
+                    {regionName} · {difficultyLabels[selectedDifficulty]} · {currentIndex + 1}/{QUESTION_COUNT} · 점수 {score}
+                  </p>
+                  <h1 className="mt-1 text-xl font-black text-white sm:text-3xl">어떤 포켓몬일까요?</h1>
+                </div>
+                {!isSilhouetteOnly && (isHintVisible('types') ? (
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2" style={getRevealStyle('types')}>
+                    {currentQuestion.types.map((type) => (
+                      <span
+                        key={type}
+                        className="inline-flex min-w-12 justify-center rounded-lg px-3 py-1.5 text-sm font-bold shadow-lg"
+                        style={getTypeStyle(type)}
+                      >
+                        {typeLabels[type][language]}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => revealHint('types')}
+                    className="shrink-0 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                  >
+                    타입 보기
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div
+              className={`min-h-0 p-3 sm:p-6 md:p-8 ${
+                inputFocused ? 'p-0 sm:p-6 md:p-8' : ''
               }`}
             >
               <div
-                className={`h-20 items-center justify-center rounded-lg bg-[#111318] p-2 sm:flex sm:min-h-72 sm:p-6 ${
-                  inputFocused ? 'hidden' : 'flex'
-                }`}
+                className={`grid min-h-0 gap-4 lg:gap-8 ${
+                  isSilhouetteOnly ? 'lg:grid-cols-1' : 'lg:grid-cols-[300px_minmax(0,1fr)]'
+                } ${inputFocused ? 'h-auto' : 'h-full'}`}
               >
-                {answered && currentQuestion.image ? (
-                  <img
-                    src={currentQuestion.image}
-                    alt={currentQuestion.displayName}
-                    className="h-20 w-20 object-contain transition duration-300 sm:h-64 sm:w-64"
-                  />
-                ) : hintVisibility.silhouette && currentQuestion.image ? (
-                  <img
-                    src={currentQuestion.image}
-                    alt="포켓몬 실루엣"
-                    className="h-20 w-20 object-contain transition duration-300 sm:h-64 sm:w-64"
-                    style={{ filter: 'brightness(0)' }}
-                  />
-                ) : (
-                  <div className="text-center text-sm font-bold text-[#858585] sm:text-lg">
-                    정답 제출 후 포켓몬이 공개됩니다.
+                <aside className={`space-y-3 sm:space-y-6 ${inputFocused ? 'hidden sm:block' : 'block'} ${isSilhouetteOnly ? 'mx-auto w-full max-w-sm' : ''}`}>
+                  <div className="flex h-36 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] p-3 shadow-inner sm:h-56 sm:rounded-2xl sm:p-6">
+                    {answered && currentQuestion.image ? (
+                      <img
+                        src={currentQuestion.image}
+                        alt={currentQuestion.displayName}
+                        className="h-28 w-28 object-contain transition duration-300 sm:h-40 sm:w-40"
+                      />
+                    ) : isHintVisible('silhouette') && currentQuestion.image ? (
+                      <img
+                        src={currentQuestion.image}
+                        alt="포켓몬 실루엣"
+                        className="h-28 w-28 object-contain transition duration-300 sm:h-40 sm:w-40"
+                        style={{ filter: 'brightness(0)', ...getRevealStyle('silhouette') }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => revealHint('silhouette')}
+                        className="rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                      >
+                        실루엣 보기
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
+                  {isSilhouetteOnly && feedback && (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center">
+                      <p className="font-bold text-white">{feedback}</p>
+                      <p className="mt-2 text-xl font-black text-[#ce9178]">{currentQuestion.displayName}</p>
+                    </div>
+                  )}
 
-              <div className="flex min-h-0 flex-col">
-                <h1
-                  className={`shrink-0 text-xl font-bold text-[#ce9178] sm:block sm:text-3xl ${
-                    inputFocused ? 'hidden' : 'block'
-                  }`}
-                >
-                  어떤 포켓몬일까요?
-                </h1>
-
-                <div className="grid min-h-0 gap-2 overflow-hidden sm:mt-6 sm:gap-4">
-                  {hintVisibility.cry && (
+                  {!isSilhouetteOnly && (isHintVisible('cry') ? (
                     <button
                       type="button"
                       onClick={playCry}
                       disabled={!currentQuestion.cry}
-                      className="inline-flex h-10 w-fit items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50 sm:h-12 sm:gap-3 sm:px-4"
+                      className="flex h-11 w-full items-center justify-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] text-sm font-bold text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50 sm:h-12"
+                      style={getRevealStyle('cry')}
                     >
                       <span>🔊</span>
                       울음소리 재생
                     </button>
-                  )}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => revealHint('cry')}
+                      className="flex h-11 w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-sm font-bold text-slate-200 transition hover:bg-white/[0.1] sm:h-12"
+                    >
+                      울음소리 보기
+                    </button>
+                  ))}
 
-                  {hintVisibility.types && (
-                    <div>
-                      <p className="mb-1 text-xs font-bold text-[#858585] sm:mb-2 sm:text-sm">타입</p>
-                      <div className="flex flex-wrap gap-2">
-                        {currentQuestion.types.map((type) => (
-                          <span
-                            key={type}
-                            className="rounded px-2 py-1 text-xs font-bold text-white sm:px-3 sm:text-sm"
-                            style={{ backgroundColor: typeColors[type] }}
-                          >
-                            {typeLabels[type]}
+                  {!isSilhouetteOnly && (isHintVisible('stats') ? (
+                    <div className="space-y-3" style={getRevealStyle('stats')}>
+                      {currentQuestion.stats.map((stat) => (
+                        <div
+                          key={stat.label.en}
+                          className="grid grid-cols-[48px_38px_minmax(0,1fr)] items-center gap-2 sm:grid-cols-[58px_42px_minmax(0,1fr)] sm:gap-3"
+                        >
+                          <span className="text-sm font-bold text-slate-400">{stat.label[language]}</span>
+                          <span className="text-sm font-black text-white">{stat.value}</span>
+                          <span className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                            <span
+                              className="block h-full rounded-full bg-gradient-to-r from-cyan-300 to-blue-600"
+                              style={{ width: `${Math.min((stat.value / 160) * 100, 100)}%` }}
+                            />
                           </span>
-                        ))}
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-[48px_38px_minmax(0,1fr)] items-center gap-2 border-t border-white/10 pt-3 sm:grid-cols-[58px_42px_minmax(0,1fr)] sm:gap-3">
+                        <span className="text-sm font-bold text-red-300">총합</span>
+                        <span className="text-sm font-black text-white">
+                          {currentQuestion.stats.reduce((total, stat) => total + stat.value, 0)}
+                        </span>
+                        <span className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                          <span
+                            className="block h-full rounded-full bg-gradient-to-r from-red-400 to-red-700"
+                            style={{
+                              width: `${Math.min(
+                                (currentQuestion.stats.reduce((total, stat) => total + stat.value, 0) / 720) * 100,
+                                100
+                              )}%`,
+                            }}
+                          />
+                        </span>
                       </div>
                     </div>
-                  )}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => revealHint('stats')}
+                      className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                    >
+                      능력치 보기
+                    </button>
+                  ))}
 
-                  <div>
-                    <p className="mb-1 text-xs font-bold text-[#858585] sm:mb-2 sm:text-sm">설명</p>
-                    <p className="max-h-16 overflow-hidden rounded-lg bg-white/[0.05] px-3 py-2 text-sm leading-5 text-white sm:max-h-none sm:px-4 sm:py-3 sm:text-base sm:leading-7">
-                      {currentQuestion.description}
-                    </p>
+                  {!isSilhouetteOnly && (isHintVisible('gender') ? (
+                    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3" style={getRevealStyle('gender')}>
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-sm font-bold text-slate-400">성비</p>
+                        {getGenderRatio(currentQuestion.genderRate) ? (
+                          <p className="text-xs font-bold text-slate-500">수컷 / 암컷</p>
+                        ) : (
+                          <p className="text-xs font-bold text-slate-500">성별 없음</p>
+                        )}
+                      </div>
+                      {(() => {
+                        const genderRatio = getGenderRatio(currentQuestion.genderRate);
+
+                        if (!genderRatio) {
+                          return (
+                            <div className="rounded-lg bg-white/[0.05] px-3 py-2 text-xs font-black text-slate-300">
+                              성별 없음
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div>
+                            <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                              <span className="block h-full bg-sky-400" style={{ width: `${genderRatio.male}%` }} />
+                              <span className="block h-full bg-pink-400" style={{ width: `${genderRatio.female}%` }} />
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-black">
+                              <div className="rounded-lg bg-sky-400/10 px-3 py-2 text-sky-300">
+                                수컷 {formatGenderPercent(genderRatio.male)}
+                              </div>
+                              <div className="rounded-lg bg-pink-400/10 px-3 py-2 text-pink-300">
+                                암컷 {formatGenderPercent(genderRatio.female)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => revealHint('gender')}
+                      className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                    >
+                      성비 보기
+                    </button>
+                  ))}
+                </aside>
+
+                {!isSilhouetteOnly && (
+                <div className="flex min-h-0 flex-col">
+                  <div className="grid min-h-0 gap-3 overflow-hidden sm:gap-5">
+                    <div>
+                      <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-slate-400">설명</p>
+                          {selectedDescriptionGroup && (
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              {selectedDescriptionGroup.label} ·{' '}
+                              {selectedDescriptionGroup.options
+                                .map((description) => description.versionLabel[language])
+                                .join(' / ')}
+                            </p>
+                          )}
+                        </div>
+                        {descriptionGroups.length > 0 && (
+                          <select
+                            value={selectedDescriptionGroup?.options[0].generation || ''}
+                            onChange={(event) => setSelectedDescriptionGeneration(event.target.value)}
+                            className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm font-bold text-slate-100 outline-none transition hover:bg-white/[0.1] focus:border-sky-400/60 sm:w-auto"
+                            style={{ colorScheme: 'dark', backgroundColor: '#111318', color: '#f8fafc' }}
+                          >
+                            {descriptionGroups.map((group) => (
+                              <option
+                                key={group.options[0].generation}
+                                value={group.options[0].generation}
+                                style={{ backgroundColor: '#111318', color: '#f8fafc' }}
+                              >
+                                {group.label} (
+                                {group.options.map((description) => description.versionLabel[language]).join(' / ')})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      <div className="max-h-24 overflow-hidden rounded-xl bg-white/[0.05] px-4 py-3 text-sm leading-6 text-slate-100 sm:max-h-none sm:rounded-2xl sm:px-6 sm:py-5 sm:text-base sm:leading-8">
+                        {selectedDescriptionGroup
+                          ? selectedDescriptionGroup.options.map((description) => (
+                              <div key={description.version}>
+                                <p className="mb-1 text-xs font-black text-sky-300">
+                                  {description.versionLabel[language]}
+                                </p>
+                                <p>{description.text}</p>
+                              </div>
+                            ))
+                          : '설명 정보가 없습니다.'}
+                      </div>
+                    </div>
+
+                    {isHintVisible('abilities') ? (
+                      <div style={getRevealStyle('abilities')}>
+                        <p className="mb-2 text-sm font-bold text-slate-400">특성</p>
+                        <div className="flex flex-wrap gap-2">
+                          {currentQuestion.abilities.map((ability) => (
+                            <span
+                              key={`${ability.name}-${ability.isHidden}`}
+                              className={`group relative cursor-help rounded-lg border px-4 py-2 text-sm font-bold ${
+                                ability.isHidden
+                                  ? 'border-violet-400/30 bg-violet-500/10 text-violet-200'
+                                  : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+                              }`}
+                              tabIndex={0}
+                              aria-label={`${ability.name}: ${ability.description}`}
+                            >
+                              {ability.name}
+                              <span className="pointer-events-none absolute bottom-[calc(100%+10px)] left-0 z-20 hidden w-[min(16rem,calc(100vw-2rem))] rounded-xl border border-white/10 bg-[#111318] px-4 py-3 text-left text-xs font-medium leading-5 text-slate-100 shadow-2xl group-hover:block group-focus:block sm:left-1/2 sm:-translate-x-1/2">
+                                <span className="mb-1 block text-sm font-black text-white">{ability.name}</span>
+                                {ability.description}
+                                <span className="absolute left-6 top-full h-3 w-3 -translate-y-1/2 rotate-45 border-b border-r border-white/10 bg-[#111318] sm:left-1/2 sm:-translate-x-1/2" />
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => revealHint('abilities')}
+                        className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                      >
+                        특성 보기
+                      </button>
+                    )}
+
+                    {isHintVisible('size') ? (
+                      <div className="grid grid-cols-2 gap-3 sm:gap-8" style={getRevealStyle('size')}>
+                        <div>
+                          <p className="text-sm font-bold text-slate-400">키</p>
+                          <p className="mt-1 text-xl font-black text-white sm:mt-2 sm:text-2xl">
+                            {currentQuestion.height.toFixed(1)} m
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-400">몸무게</p>
+                          <p className="mt-1 text-xl font-black text-white sm:mt-2 sm:text-2xl">
+                            {currentQuestion.weight.toFixed(1)} kg
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => revealHint('size')}
+                        className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                      >
+                        키 / 몸무게 보기
+                      </button>
+                    )}
+
+                    {currentQuestion.evolutionChain.length > 0 && (isHintVisible('evolution') ? (
+                      <div className="border-t border-white/10 pt-5" style={getRevealStyle('evolution')}>
+                        <h3 className="text-xl font-black text-white">진화 계통</h3>
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                          {currentQuestion.evolutionChain.map((stage, index) => (
+                            <div key={`${stage.id}-${index}`} className="flex items-center gap-3">
+                              {index > 0 && (
+                                <div className="text-center text-sky-400">
+                                  <p className="text-[10px] font-black">
+                                    {stage.minLevel ? `Lv. ${stage.minLevel}` : ''}
+                                  </p>
+                                  <p className="text-xl font-black">→</p>
+                                </div>
+                              )}
+                              <div
+                                className={`w-24 rounded-xl border p-2 text-center ${
+                                  stage.id === currentQuestion.id
+                                    ? 'border-sky-400/70 bg-sky-500/10'
+                                    : 'border-white/5 bg-white/[0.04]'
+                                }`}
+                              >
+                                <p className="text-[10px] font-black text-sky-400">
+                                  No.{stage.id.toString().padStart(3, '0')}
+                                </p>
+                                <div className="flex h-12 items-center justify-center">
+                                  {stage.sprite && (
+                                    <img
+                                      src={stage.sprite}
+                                      alt="진화 계통 실루엣"
+                                      className="h-12 w-12 object-contain"
+                                      style={{ filter: answered ? undefined : 'brightness(0)' }}
+                                    />
+                                  )}
+                                </div>
+                                <div className="flex justify-center gap-1">
+                                  {stage.types.map((type) => (
+                                    <span
+                                      key={type}
+                                      className="rounded px-1.5 py-0.5 text-[10px] font-bold leading-none"
+                                      style={getTypeStyle(type)}
+                                    >
+                                      {typeLabels[type][language]}
+                                    </span>
+                                  ))}
+                                </div>
+                                <p className="mt-2 truncate text-xs font-black text-white">
+                                  {answered ? stage.name : '???'}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => revealHint('evolution')}
+                        className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                      >
+                        진화 계통 보기
+                      </button>
+                    ))}
                   </div>
 
-                  {hintVisibility.abilities && (
-                    <div>
-                      <p className="mb-1 text-xs font-bold text-[#858585] sm:mb-2 sm:text-sm">특성</p>
-                      <div className="flex flex-wrap gap-2">
-                        {currentQuestion.abilities.map((ability) => (
-                          <span
-                            key={`${ability.name}-${ability.isHidden}`}
-                            className={`group relative cursor-help rounded-lg border px-3 py-1.5 text-xs font-bold sm:px-4 sm:py-2 sm:text-sm ${
-                              ability.isHidden
-                                ? 'border-violet-400/30 bg-violet-500/10 text-violet-200'
-                                : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
-                            }`}
-                            tabIndex={0}
-                            aria-label={`${ability.name}: ${ability.description}`}
-                          >
-                            {ability.name}
-                            <span className="pointer-events-none absolute bottom-[calc(100%+10px)] left-0 z-20 hidden w-[min(16rem,calc(100vw-2rem))] rounded-xl border border-white/10 bg-[#111318] px-4 py-3 text-left text-xs font-medium leading-5 text-slate-100 shadow-2xl group-hover:block group-focus:block sm:left-1/2 sm:-translate-x-1/2">
-                              <span className="mb-1 block text-sm font-black text-white">{ability.name}</span>
-                              {ability.description}
-                              <span className="absolute left-6 top-full h-3 w-3 -translate-y-1/2 rotate-45 border-b border-r border-white/10 bg-[#111318] sm:left-1/2 sm:-translate-x-1/2" />
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {hintVisibility.size && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg bg-white/[0.05] px-3 py-2 sm:px-4 sm:py-3">
-                        <p className="text-xs font-bold text-[#858585] sm:text-sm">키</p>
-                        <p className="mt-1 text-base font-bold text-white sm:text-xl">{currentQuestion.height.toFixed(1)} m</p>
-                      </div>
-                      <div className="rounded-lg bg-white/[0.05] px-3 py-2 sm:px-4 sm:py-3">
-                        <p className="text-xs font-bold text-[#858585] sm:text-sm">몸무게</p>
-                        <p className="mt-1 text-base font-bold text-white sm:text-xl">{currentQuestion.weight.toFixed(1)} kg</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <form onSubmit={submitAnswer} className="mt-3 flex shrink-0 gap-2 sm:mt-7">
-                  <input
-                    ref={answerInputRef}
-                    type="text"
-                    value={answer}
-                    onChange={(event) => setAnswer(event.target.value)}
-                    onFocus={() => setInputFocused(true)}
-                    onBlur={() => setInputFocused(false)}
-                    disabled={answered}
-                    placeholder="정답 입력"
-                    autoFocus
-                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-base font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={answered || !answer.trim()}
-                    aria-label="정답 제출"
-                    className="flex h-12 w-14 items-center justify-center rounded-lg bg-[#007acc] text-2xl font-black text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    ↵
-                  </button>
-                </form>
-
-                {feedback && (
+                {!isSilhouetteOnly && feedback && (
                   <div className="mt-2 shrink-0 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 sm:mt-4 sm:px-4 sm:py-3">
                     <p className="font-bold text-white">{feedback}</p>
                   </div>
                 )}
               </div>
+                )}
+            </div>
+              <form onSubmit={submitAnswer} className="mt-4 flex w-full shrink-0 gap-2 sm:mt-7">
+                <input
+                  type="text"
+                  value={answer}
+                  onChange={(event) => setAnswer(event.target.value)}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  disabled={answered}
+                  placeholder="정답 입력"
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-base font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
+                />
+                <button
+                  type="submit"
+                  disabled={answered || !answer.trim()}
+                  aria-label="정답 제출"
+                  className="flex h-12 w-14 shrink-0 items-center justify-center rounded-lg bg-[#007acc] text-2xl font-black text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  ↵
+                </button>
+              </form>
             </div>
           </section>
         )}

@@ -15,6 +15,7 @@ const difficulties = [
   { slug: 'beginner', label: '초보', description: '실루엣과 여러 힌트로 풀기', color: '#22c55e' },
   { slug: 'intermediate', label: '중수', description: '핵심 정보만 보고 풀기', color: '#f59e0b' },
   { slug: 'expert', label: '고수', description: '최소 힌트로 도전하기', color: '#ef4444' },
+  { slug: 'silhouette', label: '뭘까요?', description: '실루엣만 보고 맞히기', color: '#38bdf8' },
 ];
 
 interface PokemonQuizRegionPageProps {
@@ -42,7 +43,7 @@ export default async function PokemonQuizRegionPage({ params }: PokemonQuizRegio
           <p className="mt-3 text-lg text-[#bdbdbd]">난이도를 선택하세요.</p>
         </header>
 
-        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {difficulties.map((difficulty) => (
             <a
               key={difficulty.slug}

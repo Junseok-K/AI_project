@@ -154,6 +154,7 @@ const translations: Record<Language, Record<string, string>> = {
     allGenerations: '전체',
     generationSuffix: '세대',
     noImage: '이미지 없음',
+    statTotal: '총합',
   },
   en: {
     back: '← Go back',
@@ -188,6 +189,7 @@ const translations: Record<Language, Record<string, string>> = {
     allGenerations: 'All',
     generationSuffix: 'Gen',
     noImage: 'No Image',
+    statTotal: 'Total',
   },
   ja: {
     back: '← 戻る',
@@ -222,6 +224,7 @@ const translations: Record<Language, Record<string, string>> = {
     allGenerations: 'すべて',
     generationSuffix: '世代',
     noImage: '画像なし',
+    statTotal: '合計',
   },
 };
 
@@ -1198,6 +1201,23 @@ export default function PokemonPokedex() {
                       </span>
                     </div>
                   ))}
+                  <div className="grid grid-cols-[48px_38px_minmax(0,1fr)] items-center gap-2 border-t border-white/10 pt-3 sm:grid-cols-[58px_42px_minmax(0,1fr)] sm:gap-3">
+                    <span className="text-sm font-bold text-red-300">{t('statTotal')}</span>
+                    <span className="text-sm font-black text-white">
+                      {selectedPokemon.stats.reduce((total, stat) => total + stat.value, 0)}
+                    </span>
+                    <span className="h-2 overflow-hidden rounded-full bg-white/[0.08]">
+                      <span
+                        className="block h-full rounded-full bg-gradient-to-r from-red-400 to-red-700"
+                        style={{
+                          width: `${Math.min(
+                            (selectedPokemon.stats.reduce((total, stat) => total + stat.value, 0) / 720) * 100,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.04] p-4">
@@ -1527,7 +1547,7 @@ export default function PokemonPokedex() {
         </h1>
         <p className="mb-6" style={{ color: '#e0e0e0' }}>
           {visiblePokemonSpecies.length > 0 &&
-            `${t('totalPokemon')} ${visiblePokemon.length} / ${visiblePokemonSpecies.length}${t('pokemon')}`}
+            `${t('totalPokemon')} ${visiblePokemonSpecies.length}${t('pokemon')}`}
         </p>
 
         <div className="mb-3 flex flex-wrap gap-2">
@@ -1580,31 +1600,31 @@ export default function PokemonPokedex() {
           </div>
         ) : (
           <div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10 gap-3">
+            <div className="grid grid-cols-5 gap-2 sm:grid-cols-5 md:grid-cols-5 xl:grid-cols-10 xl:gap-3">
               {filteredPokemon.length > 0 ? (
                 filteredPokemon.map((p) => (
                   <div
                     key={p.id}
-                    className="rounded-lg shadow-lg p-3 hover:shadow-xl transition-all cursor-pointer hover:scale-105"
+                    className="rounded-lg p-1.5 shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:p-3"
                     style={{ backgroundColor: '#252526' }}
                     onClick={() => openPokemonDetail(p)}
                   >
-                    <div className="flex justify-center mb-3">
+                    <div className="mb-1.5 flex justify-center sm:mb-3">
                       {p.image ? (
-                        <img src={p.image} alt={p.name[language]} className="w-20 h-20" />
+                        <img src={p.image} alt={p.name[language]} className="h-12 w-12 sm:h-20 sm:w-20" />
                       ) : (
                         <div
-                          className="w-20 h-20 rounded flex items-center justify-center text-xs"
+                          className="flex h-12 w-12 items-center justify-center rounded text-[10px] sm:h-20 sm:w-20 sm:text-xs"
                           style={{ backgroundColor: '#3e3e42', color: '#e0e0e0' }}
                         >
                           {t('noImage')}
                         </div>
                       )}
                     </div>
-                    <h2 className="text-sm font-bold text-center leading-tight" style={{ color: '#007acc' }}>
+                    <h2 className="truncate text-center text-[11px] font-bold leading-tight sm:text-sm" style={{ color: '#007acc' }}>
                       {p.name[language]}
                     </h2>
-                    <div className="flex flex-wrap gap-1 justify-center mt-2">
+                    <div className="mt-1 hidden flex-wrap justify-center gap-1 sm:flex">
                       {p.types.map((type) => (
                         <span
                           key={type}
@@ -1615,7 +1635,7 @@ export default function PokemonPokedex() {
                         </span>
                       ))}
                     </div>
-                    <p className="text-xs text-center mt-2" style={{ color: '#858585' }}>
+                    <p className="mt-1 text-center text-[10px] sm:mt-2 sm:text-xs" style={{ color: '#858585' }}>
                       No. {p.id}
                     </p>
                   </div>
