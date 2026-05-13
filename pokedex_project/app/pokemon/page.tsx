@@ -115,10 +115,21 @@ interface EvolutionNode {
 
 const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
 const GENERATION_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-const MAX_CONCURRENT_POKEMON_REQUESTS = 24;
-const POKEMON_BATCH_SIZE = 40;
+const MAX_CONCURRENT_POKEMON_REQUESTS = 8;
+const POKEMON_BATCH_SIZE = 25;
 const LANGUAGE_STORAGE_KEY = 'pokemon-language';
 const generationFilterOptions = ['all', ...GENERATION_IDS] as const;
+
+const fetchWithTimeout = async (url: string, timeoutMs = 12000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 
 const translations: Record<Language, Record<string, string>> = {
   ko: {
@@ -657,10 +668,16 @@ export default function PokemonPokedex() {
 
   const fetchPokemonDetail = useCallback(async (species: PokemonSpecies) => {
     const pokemonId = getPokemonIdFromSpeciesUrl(species.url);
-    const res = await fetch(`${POKEAPI_BASE_URL}/pokemon/${pokemonId}`);
+    const res = await fetchWithTimeout(`${POKEAPI_BASE_URL}/pokemon/${pokemonId}`);
+    if (!res.ok) {
+      throw new Error(`Pokemon request failed: ${pokemonId}`);
+    }
     const pokemonData = await res.json();
 
-    const speciesRes = await fetch(`${POKEAPI_BASE_URL}/pokemon-species/${pokemonData.id}`);
+    const speciesRes = await fetchWithTimeout(`${POKEAPI_BASE_URL}/pokemon-species/${pokemonData.id}`);
+    if (!speciesRes.ok) {
+      throw new Error(`Pokemon species request failed: ${pokemonData.id}`);
+    }
     const speciesData = await speciesRes.json();
     const descriptions = buildFlavorTexts(speciesData.flavor_text_entries);
 
@@ -670,8 +687,14 @@ export default function PokemonPokedex() {
           if (!abilityCacheRef.current.has(abilityItem.ability.url)) {
             abilityCacheRef.current.set(
               abilityItem.ability.url,
-              fetch(abilityItem.ability.url)
-                .then((abilityRes) => abilityRes.json())
+              fetchWithTimeout(abilityItem.ability.url)
+                .then((abilityRes) => {
+                  if (!abilityRes.ok) {
+                    throw new Error(`Ability request failed: ${abilityItem.ability.name}`);
+                  }
+
+                  return abilityRes.json();
+                })
                 .then((abilityData) => ({
                   name: {
                     ko: getNameByLanguage(abilityData.names, 'ko', abilityItem.ability.name.replace('-', ' ')),
@@ -737,7 +760,10 @@ export default function PokemonPokedex() {
         MAX_CONCURRENT_POKEMON_REQUESTS,
         async (species) => {
           const pokemonId = getPokemonIdFromSpeciesUrl(species.url);
-          const response = await fetch(species.url);
+          const response = await fetchWithTimeout(species.url);
+          if (!response.ok) {
+            throw new Error(`Species request failed: ${species.name}`);
+          }
           const speciesData = await response.json();
 
           return {
@@ -773,11 +799,20 @@ export default function PokemonPokedex() {
     setLoadingMore(true);
 
     try {
-      const nextPokemon = await mapWithConcurrency(
-        nextSpecies,
-        MAX_CONCURRENT_POKEMON_REQUESTS,
-        fetchPokemonDetail
-      );
+      const nextPokemon = (
+        await mapWithConcurrency(
+          nextSpecies,
+          MAX_CONCURRENT_POKEMON_REQUESTS,
+          async (species) => {
+            try {
+              return await fetchPokemonDetail(species);
+            } catch (error) {
+              console.error(`Pokemon detail load failed: ${species.name}`, error);
+              return null;
+            }
+          }
+        )
+      ).filter((item): item is PokemonDetail => Boolean(item));
 
       setPokemon((currentPokemon) => {
         const pokemonById = new Map(currentPokemon.map((item) => [item.id, item]));
@@ -802,7 +837,10 @@ export default function PokemonPokedex() {
       try {
         const generationData = await Promise.all(
           GENERATION_IDS.map(async (generationId) => {
-            const response = await fetch(`${POKEAPI_BASE_URL}/generation/${generationId}`);
+            const response = await fetchWithTimeout(`${POKEAPI_BASE_URL}/generation/${generationId}`);
+            if (!response.ok) {
+              throw new Error(`Generation request failed: ${generationId}`);
+            }
             return response.json();
           })
         );
@@ -893,11 +931,20 @@ export default function PokemonPokedex() {
           return;
         }
 
-        const searchPokemon = await mapWithConcurrency(
-          missingSpecies,
-          MAX_CONCURRENT_POKEMON_REQUESTS,
-          fetchPokemonDetail
-        );
+        const searchPokemon = (
+          await mapWithConcurrency(
+            missingSpecies,
+            MAX_CONCURRENT_POKEMON_REQUESTS,
+            async (species) => {
+              try {
+                return await fetchPokemonDetail(species);
+              } catch (error) {
+                console.error(`Search detail load failed: ${species.name}`, error);
+                return null;
+              }
+            }
+          )
+        ).filter((item): item is PokemonDetail => Boolean(item));
 
         if (!isMounted) {
           return;

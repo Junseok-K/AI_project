@@ -516,7 +516,6 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     const savedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
     return isLanguage(savedLanguage) ? savedLanguage : 'ko';
   });
-  const [inputFocused, setInputFocused] = useState(false);
   const [selectedDescriptionGeneration, setSelectedDescriptionGeneration] = useState('');
   const [revealedHints, setRevealedHints] = useState<HintKey[]>([]);
 
@@ -655,7 +654,6 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
       setFeedback(`오답입니다. 정답은 ${currentQuestion.displayName}입니다.`);
     }
 
-    setInputFocused(false);
     setAnswered(true);
     window.setTimeout(() => {
       goToNextQuestion();
@@ -721,13 +719,9 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   }
 
   return (
-    <div className="h-dvh overflow-hidden bg-[#1e1e1e] px-3 py-2 text-[#e0e0e0] sm:min-h-screen sm:overflow-x-hidden sm:px-4 sm:py-8">
-      <main className="mx-auto flex h-full w-full max-w-5xl flex-col">
-        <div
-          className={`mb-2 shrink-0 flex-wrap items-center justify-between gap-2 sm:mb-8 sm:flex sm:gap-3 ${
-            inputFocused ? 'hidden' : 'flex'
-          }`}
-        >
+    <div className="min-h-screen overflow-x-hidden bg-[#1e1e1e] px-3 py-3 text-[#e0e0e0] sm:px-4 sm:py-8">
+      <main className="mx-auto w-full max-w-5xl">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 sm:mb-8 sm:gap-3">
           <a
             href={`/pokemon-quiz/${region}`}
             className="rounded-lg bg-[#007acc] px-3 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-80 sm:px-4 sm:text-base"
@@ -740,16 +734,8 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
         </div>
 
         {currentQuestion && (
-          <section
-            className={`min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-[#050607]/95 shadow-2xl sm:rounded-2xl ${
-              inputFocused ? 'flex flex-col justify-end p-3 sm:block sm:p-0' : ''
-            }`}
-          >
-            <div
-              className={`border-b border-white/10 bg-white/[0.03] px-4 py-3 sm:px-5 ${
-                inputFocused ? 'hidden sm:block' : 'block'
-              }`}
-            >
+          <section className="rounded-xl border border-white/10 bg-[#050607]/95 shadow-2xl sm:rounded-2xl">
+            <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3 sm:px-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold text-slate-400 sm:text-sm">
@@ -781,17 +767,13 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
               </div>
             </div>
 
-            <div
-              className={`min-h-0 p-3 sm:p-6 md:p-8 ${
-                inputFocused ? 'p-0 sm:p-6 md:p-8' : ''
-              }`}
-            >
+            <div className="p-3 sm:p-6 md:p-8">
               <div
-                className={`grid min-h-0 gap-4 lg:gap-8 ${
+                className={`grid gap-4 lg:gap-8 ${
                   isSilhouetteOnly ? 'lg:grid-cols-1' : 'lg:grid-cols-[300px_minmax(0,1fr)]'
-                } ${inputFocused ? 'h-auto' : 'h-full'}`}
+                }`}
               >
-                <aside className={`space-y-3 sm:space-y-6 ${inputFocused ? 'hidden sm:block' : 'block'} ${isSilhouetteOnly ? 'mx-auto w-full max-w-sm' : ''}`}>
+                <aside className={`space-y-3 sm:space-y-6 ${isSilhouetteOnly ? 'mx-auto w-full max-w-sm' : ''}`}>
                   <div className="flex h-36 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] p-3 shadow-inner sm:h-56 sm:rounded-2xl sm:p-6">
                     {answered && currentQuestion.image ? (
                       <img
@@ -941,7 +923,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
 
                 {!isSilhouetteOnly && (
                 <div className="flex min-h-0 flex-col">
-                  <div className="grid min-h-0 gap-3 overflow-hidden sm:gap-5">
+                  <div className="grid gap-3 sm:gap-5">
                     <div>
                       <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
                         <div>
@@ -1126,8 +1108,6 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                   type="text"
                   value={answer}
                   onChange={(event) => setAnswer(event.target.value)}
-                  onFocus={() => setInputFocused(true)}
-                  onBlur={() => setInputFocused(false)}
                   disabled={answered}
                   placeholder="정답 입력"
                   className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-base font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
