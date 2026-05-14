@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-type Difficulty = 'beginner' | 'intermediate' | 'expert' | 'silhouette';
+type Difficulty = 'beginner' | 'intermediate' | 'expert' | 'silhouette' | 'silhouette-choice';
 type HintKey = 'silhouette' | 'cry' | 'types' | 'stats' | 'gender' | 'abilities' | 'size' | 'evolution';
 type Language = 'ko' | 'en' | 'ja';
 type PokemonType =
@@ -94,6 +94,7 @@ const initialHintsByDifficulty: Record<Difficulty, HintKey[]> = {
   intermediate: ['cry', 'abilities', 'size'],
   expert: ['size'],
   silhouette: ['silhouette'],
+  'silhouette-choice': ['silhouette'],
 };
 
 const regionNames: Record<string, string> = {
@@ -127,6 +128,7 @@ const difficultyLabels: Record<Difficulty, string> = {
   intermediate: '중수',
   expert: '고수',
   silhouette: '뭘까요?',
+  'silhouette-choice': '뭘까요?',
 };
 
 const typeLabels: Record<PokemonType, Record<Language, string>> = {
@@ -496,7 +498,7 @@ const getQuestionPool = async (region: string) => {
 };
 
 export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameProps) {
-  const selectedDifficulty = (['beginner', 'intermediate', 'expert', 'silhouette'].includes(difficulty)
+  const selectedDifficulty = (['beginner', 'intermediate', 'expert', 'silhouette', 'silhouette-choice'].includes(difficulty)
     ? difficulty
     : 'beginner') as Difficulty;
   const regionName = regionNames[region] || '포켓몬';
@@ -506,6 +508,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   const [feedback, setFeedback] = useState('');
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(false);
+  const [selectedChoiceId, setSelectedChoiceId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [language, setLanguage] = useState<Language>(() => {
@@ -518,10 +521,22 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   });
   const [selectedDescriptionGeneration, setSelectedDescriptionGeneration] = useState('');
   const [revealedHints, setRevealedHints] = useState<HintKey[]>([]);
+  const answerInputRef = useRef<HTMLInputElement>(null);
 
   const currentQuestion = questions[currentIndex];
   const isFinished = questions.length > 0 && currentIndex >= questions.length;
-  const isSilhouetteOnly = selectedDifficulty === 'silhouette';
+  const isChoiceMode = selectedDifficulty === 'silhouette-choice';
+  const isSilhouetteOnly = selectedDifficulty === 'silhouette' || isChoiceMode;
+
+  const multipleChoiceOptions = useMemo(() => {
+    if (!currentQuestion) {
+      return [];
+    }
+
+    const wrongOptions = shuffle(questions.filter((question) => question.id !== currentQuestion.id)).slice(0, 3);
+
+    return shuffle([currentQuestion, ...wrongOptions]);
+  }, [currentQuestion, questions]);
 
   const descriptionGroups = useMemo(() => {
     if (!currentQuestion) {
@@ -607,6 +622,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
           setFeedback('');
           setScore(0);
           setAnswered(false);
+          setSelectedChoiceId(null);
           setSelectedDescriptionGeneration(getDefaultDescriptionGeneration(loadedQuestions[0]?.descriptions || []));
           setRevealedHints([]);
         }
@@ -627,6 +643,12 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
       isActive = false;
     };
   }, [region, language]);
+
+  useEffect(() => {
+    if (!isChoiceMode && currentQuestion && !answered) {
+      answerInputRef.current?.focus();
+    }
+  }, [answered, currentQuestion, isChoiceMode]);
 
   const playCry = () => {
     if (!currentQuestion?.cry) {
@@ -660,6 +682,28 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     }, 2000);
   };
 
+  const submitChoice = (selectedPokemon: QuizPokemon) => {
+    if (!currentQuestion || answered) {
+      return;
+    }
+
+    const isCorrect = selectedPokemon.id === currentQuestion.id;
+
+    setSelectedChoiceId(selectedPokemon.id);
+
+    if (isCorrect) {
+      setScore((currentScore) => currentScore + 1);
+      setFeedback('정답입니다!');
+    } else {
+      setFeedback(`오답입니다. 정답은 ${currentQuestion.displayName}입니다.`);
+    }
+
+    setAnswered(true);
+    window.setTimeout(() => {
+      goToNextQuestion();
+    }, 2000);
+  };
+
   const goToNextQuestion = () => {
     setCurrentIndex((index) => {
       const nextIndex = index + 1;
@@ -670,6 +714,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     setAnswer('');
     setFeedback('');
     setAnswered(false);
+    setSelectedChoiceId(null);
   };
 
   if (loading) {
@@ -774,7 +819,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                 }`}
               >
                 <aside className={`space-y-3 sm:space-y-6 ${isSilhouetteOnly ? 'mx-auto w-full max-w-sm' : ''}`}>
-                  <div className="flex h-36 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] p-3 shadow-inner sm:h-56 sm:rounded-2xl sm:p-6">
+                  <div className="flex h-36 items-center justify-center rounded-xl border border-white/15 bg-[#555] p-3 shadow-inner sm:h-56 sm:rounded-2xl sm:p-6">
                     {answered && currentQuestion.image ? (
                       <img
                         src={currentQuestion.image}
@@ -1103,24 +1148,52 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
               </div>
                 )}
             </div>
-              <form onSubmit={submitAnswer} className="mt-4 flex w-full shrink-0 gap-2 sm:mt-7">
-                <input
-                  type="text"
-                  value={answer}
-                  onChange={(event) => setAnswer(event.target.value)}
-                  disabled={answered}
-                  placeholder="정답 입력"
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-base font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
-                />
-                <button
-                  type="submit"
-                  disabled={answered || !answer.trim()}
-                  aria-label="정답 제출"
-                  className="flex h-12 w-14 shrink-0 items-center justify-center rounded-lg bg-[#007acc] text-2xl font-black text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  ↵
-                </button>
-              </form>
+              {isChoiceMode ? (
+                <div className="mt-4 grid w-full shrink-0 grid-cols-1 gap-2 sm:mt-7 sm:grid-cols-2">
+                  {multipleChoiceOptions.map((option) => {
+                    const isSelected = selectedChoiceId === option.id;
+                    const isCorrectOption = answered && option.id === currentQuestion.id;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => submitChoice(option)}
+                        disabled={answered}
+                        className={`min-h-12 rounded-lg border px-4 py-3 text-left text-base font-black text-white transition disabled:cursor-not-allowed ${
+                          isCorrectOption
+                            ? 'border-emerald-400 bg-emerald-500/25'
+                            : isSelected
+                              ? 'border-red-400 bg-red-500/20'
+                              : 'border-white/10 bg-[#111318] hover:border-[#007acc] hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        {option.displayName}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <form onSubmit={submitAnswer} className="mt-4 flex w-full shrink-0 gap-2 sm:mt-7">
+                  <input
+                    ref={answerInputRef}
+                    type="text"
+                    value={answer}
+                    onChange={(event) => setAnswer(event.target.value)}
+                    disabled={answered}
+                    placeholder="정답 입력"
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#111318] px-4 py-3 text-base font-bold text-white outline-none transition placeholder:text-[#858585] focus:border-[#007acc]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={answered || !answer.trim()}
+                    aria-label="정답 제출"
+                    className="flex h-12 w-14 shrink-0 items-center justify-center rounded-lg bg-[#007acc] text-2xl font-black text-white transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ↵
+                  </button>
+                </form>
+              )}
             </div>
           </section>
         )}

@@ -36,7 +36,7 @@ export default function PokemonQuizPage() {
               className="group overflow-hidden rounded-lg border border-white/10 bg-[#252526] transition hover:-translate-y-1 hover:border-white/25 hover:shadow-xl"
             >
               <div
-                className="relative h-44"
+                className="relative h-32"
                 style={{
                   background: `linear-gradient(135deg, ${map.color}33, #111318 70%)`,
                 }}
@@ -54,12 +54,12 @@ export default function PokemonQuizPage() {
                   style={{ backgroundColor: map.color }}
                 />
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:28px_28px]" />
-                <div className="absolute right-4 top-4 rounded-md bg-black/35 px-3 py-1 text-sm font-bold text-white">
+                <div className="absolute right-4 top-4 rounded-md bg-black/35 px-3 py-1 text-xl font-bold text-white">
                   {typeof map.generation === 'number' ? `${map.generation}세대` : map.generation}
                 </div>
               </div>
 
-              <div className="flex min-h-20 items-center justify-between px-5 py-4">
+              <div className="flex min-h-16 items-center justify-between px-5 py-3">
                 <h2 className="text-2xl font-bold text-white">
                   {map.region.endsWith('지방') ? map.region : `${map.region} 지방`}
                 </h2>
