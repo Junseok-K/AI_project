@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 type Language = 'ko' | 'en' | 'ja';
@@ -58,6 +59,11 @@ interface PokemonSpecies {
   generationId: number;
 }
 
+interface NamedApiResource {
+  name: string;
+  url: string;
+}
+
 interface PokemonDetail {
   id: number;
   name: Record<Language, string>;
@@ -107,10 +113,34 @@ interface EvolutionPokemon {
   minLevel?: number;
 }
 
+interface EvolutionPokemonNode extends EvolutionPokemon {
+  methodLabel?: string;
+  evolvesTo: EvolutionPokemonNode[];
+}
+
+interface EvolutionDetail {
+  min_level: number | null;
+  item: NamedApiResource | null;
+  trigger: NamedApiResource | null;
+  held_item: NamedApiResource | null;
+  known_move: NamedApiResource | null;
+  known_move_type: NamedApiResource | null;
+  location: NamedApiResource | null;
+  min_happiness: number | null;
+  min_affection: number | null;
+  min_beauty: number | null;
+  needs_overworld_rain: boolean;
+  party_species: NamedApiResource | null;
+  party_type: NamedApiResource | null;
+  time_of_day: string;
+  trade_species: NamedApiResource | null;
+  turn_upside_down: boolean;
+}
+
 interface EvolutionNode {
   species: { name: string; url: string };
   evolves_to: EvolutionNode[];
-  evolution_details: Array<{ min_level: number | null }>;
+  evolution_details: EvolutionDetail[];
 }
 
 const POKEAPI_BASE_URL = 'https://pokeapi.co/api/v2';
@@ -513,6 +543,124 @@ const getGenderRatio = (genderRate: number) => {
 
 const formatGenderPercent = (value: number) => `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
 
+const resourceNameOverrides: Record<Language, Record<string, string>> = {
+  ko: {
+    'fire-stone': '불꽃의 돌',
+    'water-stone': '물의 돌',
+    'thunder-stone': '천둥의 돌',
+    'leaf-stone': '리프의 돌',
+    'moon-stone': '달의 돌',
+    'sun-stone': '태양의 돌',
+    'shiny-stone': '빛의 돌',
+    'dusk-stone': '어둠의 돌',
+    'dawn-stone': '각성의 돌',
+    'ice-stone': '얼음의 돌',
+  },
+  en: {},
+  ja: {},
+};
+
+const getFallbackResourceLabel = (name: string) => name.replaceAll('-', ' ');
+
+const getLocalizedResourceName = async (resource: NamedApiResource | null, language: Language) => {
+  if (!resource) {
+    return '';
+  }
+
+  const override = resourceNameOverrides[language][resource.name];
+
+  if (override) {
+    return override;
+  }
+
+  try {
+    const response = await fetchWithTimeout(resource.url);
+    const data = await response.json();
+
+    return getNameByLanguage(data.names || [], language, getFallbackResourceLabel(resource.name));
+  } catch {
+    return getFallbackResourceLabel(resource.name);
+  }
+};
+
+const buildEvolutionMethodLabel = async (detail: EvolutionDetail | undefined, language: Language) => {
+  if (!detail) {
+    return '';
+  }
+
+  const labels: string[] = [];
+
+  if (detail.min_level) {
+    labels.push(`Lv. ${detail.min_level}`);
+  }
+
+  if (detail.item) {
+    labels.push(await getLocalizedResourceName(detail.item, language));
+  }
+
+  if (detail.held_item) {
+    labels.push(`${language === 'ko' ? '지닌 도구' : 'Held item'}: ${await getLocalizedResourceName(detail.held_item, language)}`);
+  }
+
+  if (detail.min_happiness) {
+    labels.push(language === 'ko' ? '친밀도' : 'Happiness');
+  }
+
+  if (detail.min_affection) {
+    labels.push(language === 'ko' ? '애정도' : 'Affection');
+  }
+
+  if (detail.min_beauty) {
+    labels.push(language === 'ko' ? '아름다움' : 'Beauty');
+  }
+
+  if (detail.time_of_day) {
+    labels.push(detail.time_of_day === 'day' ? (language === 'ko' ? '낮' : 'Day') : language === 'ko' ? '밤' : 'Night');
+  }
+
+  if (detail.needs_overworld_rain) {
+    labels.push(language === 'ko' ? '비가 올 때' : 'Rain');
+  }
+
+  if (detail.turn_upside_down) {
+    labels.push(language === 'ko' ? '기기를 뒤집기' : 'Upside down');
+  }
+
+  if (detail.known_move) {
+    labels.push(`${language === 'ko' ? '기술' : 'Move'}: ${await getLocalizedResourceName(detail.known_move, language)}`);
+  }
+
+  if (detail.known_move_type) {
+    labels.push(`${language === 'ko' ? '기술 타입' : 'Move type'}: ${await getLocalizedResourceName(detail.known_move_type, language)}`);
+  }
+
+  if (detail.location) {
+    labels.push(await getLocalizedResourceName(detail.location, language));
+  }
+
+  if (detail.party_species) {
+    labels.push(`${language === 'ko' ? '파티' : 'Party'}: ${await getLocalizedResourceName(detail.party_species, language)}`);
+  }
+
+  if (detail.party_type) {
+    labels.push(`${language === 'ko' ? '파티 타입' : 'Party type'}: ${await getLocalizedResourceName(detail.party_type, language)}`);
+  }
+
+  if (detail.trade_species) {
+    labels.push(`${language === 'ko' ? '교환 상대' : 'Trade for'}: ${await getLocalizedResourceName(detail.trade_species, language)}`);
+  }
+
+  if (labels.length > 0) {
+    return labels.join(' · ');
+  }
+
+  if (detail.trigger?.name === 'trade') {
+    return language === 'ko' ? '교환' : 'Trade';
+  }
+
+  return '';
+};
+
 const flattenEvolutionChain = (node: EvolutionNode, minLevel?: number): EvolutionPokemon[] => {
   const id = getPokemonIdFromSpeciesUrl(node.species.url);
   const current = {
@@ -531,6 +679,39 @@ const flattenEvolutionChain = (node: EvolutionNode, minLevel?: number): Evolutio
   ];
 };
 
+const buildEvolutionTree = async (
+  node: EvolutionNode,
+  language: Language,
+  pokemon: PokemonDetail[],
+  pokemonSpecies: PokemonSpecies[],
+  methodDetail?: EvolutionDetail
+): Promise<EvolutionPokemonNode | null> => {
+  const id = getPokemonIdFromSpeciesUrl(node.species.url);
+
+  if (!pokemonSpecies.some((species) => getPokemonIdFromSpeciesUrl(species.url) === id)) {
+    return null;
+  }
+
+  const detail = pokemon.find((item) => item.id === id);
+  const evolvesTo = (
+    await Promise.all(
+      node.evolves_to.map((child) =>
+        buildEvolutionTree(child, language, pokemon, pokemonSpecies, child.evolution_details[0])
+      )
+    )
+  ).filter((stage): stage is EvolutionPokemonNode => Boolean(stage));
+
+  return {
+    id,
+    name: detail?.name[language] || `No.${id.toString().padStart(3, '0')}`,
+    types: detail?.types || [],
+    sprite: detail?.image || detail?.sprite || '',
+    minLevel: methodDetail?.min_level || undefined,
+    methodLabel: await buildEvolutionMethodLabel(methodDetail, language),
+    evolvesTo,
+  };
+};
+
 export default function PokemonPokedex() {
   const popupContentRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -545,7 +726,7 @@ export default function PokemonPokedex() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedPokemon, setSelectedPokemon] = useState<PokemonDetail | null>(null);
   const [selectedDescriptionGeneration, setSelectedDescriptionGeneration] = useState('');
-  const [evolutionChain, setEvolutionChain] = useState<EvolutionPokemon[]>([]);
+  const [evolutionTree, setEvolutionTree] = useState<EvolutionPokemonNode | null>(null);
   const [moveGroups, setMoveGroups] = useState<PokemonMoveGroups>({ levelUp: [], special: [] });
   const [movesLoading, setMovesLoading] = useState(false);
   const [expandedMoveKey, setExpandedMoveKey] = useState<string | null>(null);
@@ -1003,33 +1184,22 @@ export default function PokemonPokedex() {
 
     const fetchEvolutionChain = async () => {
       if (!selectedPokemon) {
-        setEvolutionChain([]);
+        setEvolutionTree(null);
         return;
       }
 
       try {
         const response = await fetch(selectedPokemon.evolutionChainUrl);
         const data = await response.json();
-          const chain = flattenEvolutionChain(data.chain)
-            .map((stage) => {
-              const detail = pokemon.find((item) => item.id === stage.id);
-
-            return {
-              ...stage,
-              name: detail?.name[language] || `No.${stage.id.toString().padStart(3, '0')}`,
-              types: detail?.types || [],
-                sprite: detail?.image || detail?.sprite || '',
-              };
-            })
-          .filter((stage) => pokemonSpecies.some((species) => getPokemonIdFromSpeciesUrl(species.url) === stage.id));
+        const tree = await buildEvolutionTree(data.chain, language, pokemon, pokemonSpecies);
 
         if (isMounted) {
-          setEvolutionChain(chain);
+          setEvolutionTree(tree);
         }
       } catch (error) {
         console.error('진화 계통 로드 실패:', error);
         if (isMounted) {
-          setEvolutionChain([]);
+          setEvolutionTree(null);
         }
       }
     };
@@ -1145,6 +1315,65 @@ export default function PokemonPokedex() {
       popupContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     });
   };
+
+  const renderEvolutionCard = (stage: EvolutionPokemonNode) => (
+    <button
+      key={stage.id}
+      type="button"
+      onClick={() => selectEvolutionPokemon(stage.id)}
+      disabled={!pokemon.some((item) => item.id === stage.id)}
+      className={`w-20 rounded-xl border p-1.5 text-center transition sm:w-28 sm:p-3 ${
+        stage.id === selectedPokemon?.id
+          ? 'border-sky-400/70 bg-sky-500/10'
+          : 'border-white/5 bg-white/[0.04] hover:border-sky-400/50 hover:bg-sky-500/10'
+      } ${pokemon.some((item) => item.id === stage.id) ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+      aria-label={`${stage.name} 상세 정보 보기`}
+    >
+      <p className="text-[9px] font-black text-sky-400 sm:text-[11px]">
+        No.{stage.id.toString().padStart(3, '0')}
+      </p>
+      <div className="flex h-9 items-center justify-center sm:h-12">
+        {stage.sprite && (
+          <img src={stage.sprite} alt={stage.name} className="h-9 w-9 object-contain sm:h-12 sm:w-12" />
+        )}
+      </div>
+      <div className="flex justify-center gap-1">
+        {stage.types.map((type) => (
+          <span
+            key={type}
+            className="rounded px-1 py-0.5 text-[8px] font-bold leading-none sm:px-2 sm:py-1 sm:text-[10px]"
+            style={getTypeStyle(type)}
+          >
+            {getTypeLabel(type, language)}
+          </span>
+        ))}
+      </div>
+      <p className="mt-1 truncate text-xs font-black text-white sm:mt-2 sm:text-sm">{stage.name}</p>
+    </button>
+  );
+
+  const renderEvolutionBranch = (stage: EvolutionPokemonNode): ReactNode => (
+    <div key={stage.id} className="flex items-start gap-2 sm:gap-4">
+      {renderEvolutionCard(stage)}
+      {stage.evolvesTo.length > 0 && (
+        <div className="flex flex-col gap-2 sm:gap-3">
+          {stage.evolvesTo.map((child) => (
+            <div key={`${stage.id}-${child.id}`} className="flex items-center gap-2 sm:gap-4">
+              <div className="w-14 shrink-0 text-center text-sky-400 sm:w-24">
+                {child.methodLabel && (
+                  <p className="mb-0.5 max-h-8 overflow-hidden text-[9px] font-black leading-tight sm:text-xs">
+                    {child.methodLabel}
+                  </p>
+                )}
+                <p className="text-lg font-black leading-none sm:text-2xl">→</p>
+              </div>
+              {renderEvolutionBranch(child)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen overflow-x-hidden" style={{ backgroundColor: '#1e1e1e' }}>
@@ -1420,59 +1649,8 @@ export default function PokemonPokedex() {
 
                 <div className="mt-9 border-t border-white/10 pt-7">
                   <h3 className="text-2xl font-black text-white">{t('evolution')}</h3>
-                  <div className="mt-6 flex flex-wrap items-center gap-4">
-                    {evolutionChain.map((stage, index) => (
-                      <div key={`${stage.id}-${index}`} className="flex items-center gap-5">
-                        {index > 0 && (
-                          <div className="text-center text-sky-400">
-                            <p className="text-xs font-black">
-                              {stage.minLevel ? `Lv. ${stage.minLevel}` : ''}
-                            </p>
-                            <p className="text-2xl font-black">→</p>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => selectEvolutionPokemon(stage.id)}
-                          disabled={!pokemon.some((item) => item.id === stage.id)}
-                          className={`w-28 rounded-xl border p-3 text-center transition ${
-                            stage.id === selectedPokemon.id
-                              ? 'border-sky-400/70 bg-sky-500/10'
-                              : 'border-white/5 bg-white/[0.04] hover:border-sky-400/50 hover:bg-sky-500/10'
-                          } ${
-                            pokemon.some((item) => item.id === stage.id)
-                              ? 'cursor-pointer'
-                              : 'cursor-not-allowed opacity-60'
-                          }`}
-                          aria-label={`${stage.name} 상세 정보 보기`}
-                        >
-                          <p className="text-[11px] font-black text-sky-400">
-                            No.{stage.id.toString().padStart(3, '0')}
-                          </p>
-                          <div className="flex h-12 items-center justify-center">
-                            {stage.sprite && (
-                              <img
-                                src={stage.sprite}
-                                alt={stage.name}
-                                className="h-12 w-12 object-contain"
-                              />
-                            )}
-                          </div>
-                          <div className="flex justify-center gap-1">
-                            {stage.types.map((type) => (
-                              <span
-                                key={type}
-                                className="rounded px-2 py-1 text-[10px] font-bold leading-none"
-                                style={getTypeStyle(type)}
-                              >
-                                {getTypeLabel(type, language)}
-                              </span>
-                            ))}
-                          </div>
-                          <p className="mt-2 truncate text-sm font-black text-white">{stage.name}</p>
-                        </button>
-                      </div>
-                    ))}
+                  <div className="mt-6 overflow-x-auto pb-2">
+                    {evolutionTree && renderEvolutionBranch(evolutionTree)}
                   </div>
                 </div>
 
