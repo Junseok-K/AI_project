@@ -521,6 +521,8 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
   });
   const [selectedDescriptionGeneration, setSelectedDescriptionGeneration] = useState('');
   const [revealedHints, setRevealedHints] = useState<HintKey[]>([]);
+  const [isDescriptionHintVisible, setIsDescriptionHintVisible] = useState(false);
+  const [descriptionHint, setDescriptionHint] = useState<QuizFlavorText | null>(null);
   const answerInputRef = useRef<HTMLInputElement>(null);
 
   const currentQuestion = questions[currentIndex];
@@ -574,6 +576,15 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     [currentQuestion, descriptionGroups, selectedDescriptionGeneration]
   );
 
+  const pickDescriptionHint = (question: QuizPokemon | undefined) => {
+    if (!question || question.descriptions.length === 0) {
+      setDescriptionHint(null);
+      return;
+    }
+
+    setDescriptionHint(shuffle(question.descriptions)[0]);
+  };
+
   const isInitialHint = (hint: HintKey) => initialHintsByDifficulty[selectedDifficulty].includes(hint);
   const isHintVisible = (hint: HintKey) => answered || isInitialHint(hint) || revealedHints.includes(hint);
   const revealHint = (hint: HintKey) => {
@@ -624,7 +635,9 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
           setAnswered(false);
           setSelectedChoiceId(null);
           setSelectedDescriptionGeneration(getDefaultDescriptionGeneration(loadedQuestions[0]?.descriptions || []));
+          pickDescriptionHint(loadedQuestions[0]);
           setRevealedHints([]);
+          setIsDescriptionHintVisible(false);
         }
       } catch {
         if (isActive) {
@@ -708,7 +721,9 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
     setCurrentIndex((index) => {
       const nextIndex = index + 1;
       setSelectedDescriptionGeneration(getDefaultDescriptionGeneration(questions[nextIndex]?.descriptions || []));
+      pickDescriptionHint(questions[nextIndex]);
       setRevealedHints([]);
+      setIsDescriptionHintVisible(false);
       return nextIndex;
     });
     setAnswer('');
@@ -843,6 +858,21 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                       </button>
                     )}
                   </div>
+                  {isSilhouetteOnly && !answered && (
+                    isDescriptionHintVisible ? (
+                      <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm leading-6 text-slate-100">
+                        {descriptionHint?.text || '설명 정보가 없습니다.'}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setIsDescriptionHintVisible(true)}
+                        className="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/[0.1]"
+                      >
+                        힌트 보기
+                      </button>
+                    )
+                  )}
                   {isSilhouetteOnly && feedback && (
                     <div className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-center">
                       <p className="font-bold text-white">{feedback}</p>
