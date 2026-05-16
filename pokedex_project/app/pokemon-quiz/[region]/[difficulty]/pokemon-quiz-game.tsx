@@ -560,8 +560,10 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
 
   const currentQuestion = questions[currentIndex];
   const isFinished = questions.length > 0 && currentIndex >= questions.length;
+  const totalQuestionCount = questions.length || QUESTION_COUNT;
   const isChoiceMode = selectedDifficulty === 'silhouette-choice';
   const isSilhouetteOnly = selectedDifficulty === 'silhouette' || isChoiceMode;
+  const shouldShowDescriptionHint = isSilhouetteOnly && region !== 'paldea';
 
   const multipleChoiceOptions = useMemo(() => {
     if (!currentQuestion) {
@@ -796,7 +798,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
         <main className="mx-auto max-w-3xl text-center">
           <h1 className="text-4xl font-bold text-[#ce9178]">퀴즈 완료</h1>
           <p className="mt-6 text-2xl font-bold text-white">
-            {QUESTION_COUNT}문제 중 {score}문제 정답
+            {totalQuestionCount}문제 중 {score}문제 정답
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <a href={`/pokemon-quiz/${region}`} className="rounded-lg bg-[#007acc] px-5 py-3 font-bold text-white">
@@ -822,7 +824,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
             난이도 선택으로 돌아가기
           </a>
           <div className="text-sm font-bold text-[#bdbdbd]">
-            {regionName} · {difficultyLabels[selectedDifficulty]} · {currentIndex + 1}/{QUESTION_COUNT} · 점수 {score}
+            {regionName} · {difficultyLabels[selectedDifficulty]} · {currentIndex + 1}/{totalQuestionCount} · 점수 {score}
           </div>
         </div>
 
@@ -832,7 +834,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-bold text-slate-400 sm:text-sm">
-                    {regionName} · {difficultyLabels[selectedDifficulty]} · {currentIndex + 1}/{QUESTION_COUNT} · 점수 {score}
+                    {regionName} · {difficultyLabels[selectedDifficulty]} · {currentIndex + 1}/{totalQuestionCount} · 점수 {score}
                   </p>
                   <h1 className="mt-1 text-xl font-black text-white sm:text-3xl">어떤 포켓몬일까요?</h1>
                 </div>
@@ -891,7 +893,7 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                       </button>
                     )}
                   </div>
-                  {isSilhouetteOnly && !answered && (
+                  {shouldShowDescriptionHint && !answered && (
                     isDescriptionHintVisible ? (
                       <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm leading-6 text-slate-100">
                         {descriptionHint?.text || '설명 정보가 없습니다.'}
