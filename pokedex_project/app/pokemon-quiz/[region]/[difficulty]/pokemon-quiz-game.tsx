@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 type Difficulty = 'beginner' | 'intermediate' | 'expert' | 'silhouette' | 'silhouette-choice';
 type HintKey = 'silhouette' | 'cry' | 'types' | 'stats' | 'gender' | 'abilities' | 'size' | 'evolution';
@@ -95,6 +95,39 @@ const initialHintsByDifficulty: Record<Difficulty, HintKey[]> = {
   expert: ['size'],
   silhouette: ['silhouette'],
   'silhouette-choice': ['silhouette'],
+};
+
+const SilhouetteImage = ({
+  src,
+  label,
+  className,
+  style,
+}: {
+  src: string;
+  label: string;
+  className: string;
+  style?: CSSProperties;
+}) => {
+  const maskUrl = `url("${src}")`;
+
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      className={`bg-black ${className}`}
+      style={{
+        WebkitMaskImage: maskUrl,
+        maskImage: maskUrl,
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        ...style,
+      }}
+    />
+  );
 };
 
 const regionNames: Record<string, string> = {
@@ -842,11 +875,11 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                         className="h-28 w-28 object-contain transition duration-300 sm:h-40 sm:w-40"
                       />
                     ) : isHintVisible('silhouette') && currentQuestion.image ? (
-                      <img
+                      <SilhouetteImage
                         src={currentQuestion.image}
-                        alt="포켓몬 실루엣"
+                        label="포켓몬 실루엣"
                         className="h-28 w-28 object-contain transition duration-300 sm:h-40 sm:w-40"
-                        style={{ filter: 'brightness(0)', ...getRevealStyle('silhouette') }}
+                        style={getRevealStyle('silhouette')}
                       />
                     ) : (
                       <button
@@ -1132,12 +1165,19 @@ export default function PokemonQuizGame({ region, difficulty }: PokemonQuizGameP
                                 </p>
                                 <div className="flex h-12 items-center justify-center">
                                   {stage.sprite && (
-                                    <img
-                                      src={stage.sprite}
-                                      alt="진화 계통 실루엣"
-                                      className="h-12 w-12 object-contain"
-                                      style={{ filter: answered ? undefined : 'brightness(0)' }}
-                                    />
+                                    answered ? (
+                                      <img
+                                        src={stage.sprite}
+                                        alt={stage.name}
+                                        className="h-12 w-12 object-contain"
+                                      />
+                                    ) : (
+                                      <SilhouetteImage
+                                        src={stage.sprite}
+                                        label="진화 계통 실루엣"
+                                        className="h-12 w-12"
+                                      />
+                                    )
                                   )}
                                 </div>
                                 <div className="flex justify-center gap-1">
