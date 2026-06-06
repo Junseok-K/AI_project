@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: ai-news
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ai_news}
+    username: ${DB_USERNAME:ai_news}
+    password: ${DB_PASSWORD:ai_news}
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+naver:
+  client-id: ${NAVER_CLIENT_ID:}
+  client-secret: ${NAVER_CLIENT_SECRET:}
+  news-search-uri: ${NAVER_NEWS_SEARCH_URI:https://openapi.naver.com/v1/search/news.json}
+
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+  chat-completions-uri: ${OPENAI_CHAT_COMPLETIONS_URI:https://api.openai.com/v1/chat/completions}
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID:}
+  redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8080/oauth/kakao/callback}
+  token-uri: ${KAKAO_TOKEN_URI:https://kauth.kakao.com/oauth/token}
+  memo-send-uri: ${KAKAO_MEMO_SEND_URI:https://kapi.kakao.com/v2/api/talk/memo/default/send}
+
+news:
+  max-search-display: ${NEWS_MAX_SEARCH_DISPLAY:20}
+  max-article-chars: ${NEWS_MAX_ARTICLE_CHARS:4000}
+  max-kakao-message-chars: ${NEWS_MAX_KAKAO_MESSAGE_CHARS:900}
+  categories:
+    - name: 주요
+      keywords: [오늘 주요 뉴스, 속보, 사회 이슈]
+    - name: 경제
+      keywords: [경제, 증시, 금리, 부동산]
+    - name: IT/AI
+      keywords: [인공지능, AI, 반도체, 빅테크]
+    - name: 국제
+      keywords: [국제, 미국, 중국, 유럽]
+    - name: 정치/사회
+      keywords: [정치, 국회, 정부, 사회]
+
+logging:
+  level:
+    com.example.ainews: INFO

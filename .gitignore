@@ -1,1 +1,3 @@
 /.github
+tools/*.zip
+tools/gradle-8.10.2/lib/kotlin-compiler-embeddable-*.jar
