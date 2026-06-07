@@ -442,17 +442,19 @@ textarea:focus {
 
 .video-results {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-top: 16px;
 }
 
 .video-card {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 16px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  padding: 14px;
+  padding: 12px;
   background: rgba(7, 7, 15, 0.27);
 }
 
@@ -482,12 +484,15 @@ textarea:focus {
 }
 
 .video-title {
-  display: block;
+  display: -webkit-box;
+  overflow: hidden;
   color: #f7f7fa;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 800;
   line-height: 1.4;
   text-decoration: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .video-title:hover,
@@ -506,10 +511,10 @@ textarea:focus {
   overflow: hidden;
   margin: 10px 0 0;
   color: #c5c3d4;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   line-height: 1.6;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
 }
 
 .video-link {
@@ -547,8 +552,8 @@ textarea:focus {
     grid-column: 1 / -1;
   }
 
-  .video-card {
-    grid-template-columns: 180px minmax(0, 1fr);
+  .video-results {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -601,7 +606,7 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .video-card {
+  .video-results {
     grid-template-columns: 1fr;
   }
 }

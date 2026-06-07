@@ -25,7 +25,7 @@ const initialValues = {
 const initialYoutubeSearchValues = {
   query: '',
   order: 'relevance',
-  maxResults: '10',
+  maxResults: '8',
 }
 const koreanPattern = /[\u3131-\u318e\uac00-\ud7a3]/
 const numberOnlyPattern = /^\d+(?:\.\d+)?$/
