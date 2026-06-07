@@ -119,9 +119,28 @@ function createHashtag(text, fallback) {
   return `#${compactText || fallback}`
 }
 
-function limitTags(tags, maxLength = 480) {
+function removeAiReferences(value) {
+  return value
+    .replace(/suno\s*ai/gi, '')
+    .replace(/\bai[-\s]*(?:generated|music|song|track)?\b/gi, '')
+    .replace(/AI\s*(?:음악|노래|생성|트랙)?/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,|])/g, '$1')
+    .replace(/([|,])\s*([|,])/g, '$1')
+    .trim()
+}
+
+function getCleanSeoValue(primaryValues, fallbackValues, key, fallback) {
+  return removeAiReferences(getSeoValue(primaryValues, fallbackValues, key, fallback)) || fallback
+}
+
+function normalizeTag(tag) {
+  return removeAiReferences(tag).replace(/\s+/g, ' ').trim()
+}
+
+function limitTags(tags, maxLength = 500) {
   const uniqueTags = tags
-    .map((tag) => tag.trim())
+    .map((tag) => normalizeTag(tag))
     .filter(Boolean)
     .filter((tag, index, allTags) => allTags.indexOf(tag) === index)
   const limitedTags = []
@@ -138,56 +157,274 @@ function limitTags(tags, maxLength = 480) {
   return limitedTags.join(', ')
 }
 
-function createYoutubeMetadata(primaryValues, fallbackValues) {
-  const genre = getSeoValue(primaryValues, fallbackValues, 'genre', '오리지널 음악')
-  const mood = getSeoValue(primaryValues, fallbackValues, 'mood', '감성적인 분위기')
-  const length = formatKoreanLength(getSeoValue(primaryValues, fallbackValues, 'length', ''))
-  const bpm = getSeoValue(primaryValues, fallbackValues, 'bpm', '자연스러운')
-  const instruments = getSeoValue(primaryValues, fallbackValues, 'instruments', '다채로운 악기')
-  const vocalStyle = getSeoValue(primaryValues, fallbackValues, 'vocalStyle', '매력적인 보컬')
-  const referenceArtist = getSeoValue(primaryValues, fallbackValues, 'referenceArtist', '')
-  const referenceLine = referenceArtist
-    ? `참고 감성: ${referenceArtist}의 정서를 떠올리게 하지만, 멜로디와 분위기는 완전히 새롭게 구성했습니다.\n`
-    : ''
-  const title = `Suno AI 음악 | ${mood} ${genre} (${length})`
-  const genreHashtag = createHashtag(genre, '음악')
-  const moodHashtag = createHashtag(mood, '감성음악')
-  const description = `${mood}이 돋보이는 ${genre} 스타일의 Suno AI 음악입니다. ${length} 길이, ${bpm} 템포, ${instruments}, ${vocalStyle}을 중심으로 감성적인 분위기를 만들었습니다.
+function createTagPhrases(primaryValues, fallbackValues) {
+  const genre = getCleanSeoValue(primaryValues, fallbackValues, 'genre', '오리지널 음악')
+  const mood = getCleanSeoValue(primaryValues, fallbackValues, 'mood', '감성적인 분위기')
+  const bpm = getSeoValue(primaryValues, fallbackValues, 'bpm', '')
+  const instruments = getSeoValue(primaryValues, fallbackValues, 'instruments', '')
+  const vocalStyle = getCleanSeoValue(primaryValues, fallbackValues, 'vocalStyle', '')
+  const englishGenre = getCleanSeoValue(fallbackValues, primaryValues, 'genre', 'original music')
+  const englishMood = getCleanSeoValue(fallbackValues, primaryValues, 'mood', 'original')
+  const instrumentTags = instruments.split(',').map((instrument) => normalizeTag(instrument))
 
-이 영상은 AI 음악, Suno AI 음악 생성, ${genre}, ${mood} 음악을 찾는 분들을 위해 제작한 오리지널 트랙입니다.
-${referenceLine}
-감상 포인트:
-- 분위기: ${mood}
-- 장르: ${genre}
-- 악기: ${instruments}
-- 보컬 스타일: ${vocalStyle}
-- 템포: ${bpm}
-
-좋았다면 구독과 좋아요로 더 많은 AI 음악을 만나보세요.
-
-#SunoAI #AI음악 ${genreHashtag} ${moodHashtag}`
-  const tags = [
-    'Suno AI',
-    'Suno AI 음악',
-    'AI 음악',
-    'AI 음악 생성',
-    'AI 노래',
+  return [
     '오리지널 음악',
     genre,
     mood,
-    ...instruments.split(','),
+    ...instrumentTags,
     vocalStyle,
     bpm,
     `${genre} 음악`,
     `${mood} 음악`,
     `${genre} 플레이리스트`,
+    `${mood} 플레이리스트`,
+    `${genre} bgm`,
+    `${mood} bgm`,
+    `${genre} 추천`,
+    `${mood} 추천`,
+    `${genre} 작업음악`,
+    `${mood} 배경음악`,
+    `${genre} instrumental`,
+    `${mood} instrumental`,
     '유튜브 음악',
     '감성 음악',
     '배경음악',
+    '작업 음악',
+    '공부 음악',
+    '집중 음악',
+    '플레이리스트',
+    '브이로그 음악',
+    '힐링 음악',
     'new music',
     'original music',
-    'AI music',
+    'instrumental music',
+    'background music',
+    'playlist music',
+    englishGenre,
+    englishMood,
+    `${englishGenre} music`,
+    `${englishMood} music`,
+    `${englishGenre} playlist`,
+    `${englishMood} playlist`,
+    `${englishGenre} instrumental`,
+    `${englishMood} instrumental`,
   ]
+}
+
+function cleanTitleValue(value) {
+  return value
+    .replace(/\s+/g, ' ')
+    .replace(/\b\d+(?:\.\d+)?-minute\b/gi, '')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:bpm|beats per minute)\b/gi, '')
+    .replace(/[()[\]{}]/g, '')
+    .trim()
+}
+
+function titleCase(value) {
+  return cleanTitleValue(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function getTitleEmoji(promptText) {
+  const lowerPrompt = promptText.toLowerCase()
+  const emojiRules = [
+    { emoji: '🚗', pattern: /drive|driving|car|road|highway|city pop|도시|야경|드라이브/ },
+    { emoji: '🌙', pattern: /night|midnight|moon|dream|sleep|밤|새벽|달|몽환/ },
+    { emoji: '🌧️', pattern: /rain|storm|lofi|sad|melancholy|비|우울|쓸쓸/ },
+    { emoji: '🌊', pattern: /ocean|sea|wave|chill|calm|바다|파도|잔잔/ },
+    { emoji: '🔥', pattern: /energetic|powerful|rock|trap|edm|강렬|에너지|신나는/ },
+    { emoji: '🎹', pattern: /piano|keys|ballad|acoustic|피아노|발라드|어쿠스틱/ },
+    { emoji: '🎸', pattern: /guitar|band|indie|기타|밴드|인디/ },
+    { emoji: '✨', pattern: /synth|neon|future|bright|신스|네온|미래|반짝/ },
+  ]
+
+  return emojiRules.find(({ pattern }) => pattern.test(lowerPrompt))?.emoji || '🎵'
+}
+
+function createKoreanVideoTitle(values, fallbackValues) {
+  const genre = cleanTitleValue(getCleanSeoValue(values, fallbackValues, 'genre', '오리지널 음악'))
+  const mood = cleanTitleValue(getCleanSeoValue(values, fallbackValues, 'mood', '감성적인 분위기'))
+  const vocalStyle = cleanTitleValue(getCleanSeoValue(values, fallbackValues, 'vocalStyle', ''))
+  const focus = /instrumental|연주|무가사|보컬\s*없/i.test(`${genre} ${vocalStyle}`)
+    ? 'Instrumental'
+    : genre.includes('음악')
+      ? genre
+      : `${genre} 음악`
+
+  return `${mood}와 함께하는 ${focus}`.replace('분위기와 함께하는', '분위기의')
+}
+
+function createEnglishVideoTitle(values) {
+  const promptText = createPrompt(values)
+  const lowerPrompt = promptText.toLowerCase()
+  const genre = titleCase(removeAiReferences(getValue(values, 'genre', 'Original Music')) || 'Original Music')
+  const mood = titleCase(removeAiReferences(getValue(values, 'mood', 'Original')) || 'Original')
+
+  if (/city|urban|neon|night|midnight|drive|road|city pop/.test(lowerPrompt)) {
+    return /drive|road|car/.test(lowerPrompt) ? 'Midnight Drive' : 'Midnight City Lights'
+  }
+
+  if (/dream|nostalg|retro|memory/.test(lowerPrompt)) {
+    return 'Dreamy Neon Memories'
+  }
+
+  if (/rain|storm|sad|melancholy|lofi/.test(lowerPrompt)) {
+    return 'Rainy Night Reflections'
+  }
+
+  if (/ocean|sea|wave|calm|chill/.test(lowerPrompt)) {
+    return 'Calm Ocean Waves'
+  }
+
+  const combinedTitle = [mood, genre].filter(Boolean).join(' ')
+  return combinedTitle || 'Original Music'
+}
+
+function createVideoTitle(primaryValues, fallbackValues) {
+  const titlePrompt = `${createPrompt(primaryValues)} ${createPrompt(fallbackValues)}`
+  const emoji = getTitleEmoji(titlePrompt)
+  const koreanTitle = createKoreanVideoTitle(primaryValues, fallbackValues)
+  const englishTitle = createEnglishVideoTitle(fallbackValues)
+
+  return `${emoji} ${koreanTitle} | ${englishTitle}`
+}
+
+function getPerfectForItems(promptText) {
+  const lowerPrompt = promptText.toLowerCase()
+
+  if (/city|urban|neon|night|midnight|drive|road|city pop|도시|야경|드라이브/.test(lowerPrompt)) {
+    return [
+      'Night City Drive',
+      'Midnight Cruise',
+      'City Lights View',
+      'Study & Work BGM',
+      'Relaxing Time',
+      'Urban Chill Moments',
+    ]
+  }
+
+  if (/rain|storm|sad|melancholy|lofi|비|우울|쓸쓸/.test(lowerPrompt)) {
+    return [
+      'Rainy Night Listening',
+      'Late Night Focus',
+      'Quiet Reading',
+      'Study & Work BGM',
+      'Emotional Moments',
+      'Relaxing Time',
+    ]
+  }
+
+  if (/ocean|sea|wave|calm|chill|바다|파도|잔잔/.test(lowerPrompt)) {
+    return [
+      'Ocean View Relaxing',
+      'Slow Morning Routine',
+      'Study & Work BGM',
+      'Calm Travel Moments',
+      'Peaceful Break Time',
+      'Chill Playlist',
+    ]
+  }
+
+  if (/energetic|powerful|rock|trap|edm|강렬|에너지|신나는/.test(lowerPrompt)) {
+    return [
+      'Workout Playlist',
+      'Driving BGM',
+      'Creative Focus',
+      'Gaming Sessions',
+      'High Energy Moments',
+      'Motivation Time',
+    ]
+  }
+
+  return [
+    'Study & Work BGM',
+    'Relaxing Time',
+    'Daily Playlist',
+    'Vlog Background Music',
+    'Creative Focus',
+    'Chill Moments',
+  ]
+}
+
+function getFeaturingItems(primaryValues, fallbackValues) {
+  const genre = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'genre', 'Original Music'))
+  const mood = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'mood', 'Emotional'))
+  const instruments = getSeoValue(fallbackValues, primaryValues, 'instruments', 'Warm Instruments')
+    .split(',')
+    .map((instrument) => titleCase(removeAiReferences(instrument)))
+    .filter(Boolean)
+  const vocalStyle = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'vocalStyle', 'Instrumental'))
+  const referenceArtist = cleanTitleValue(getCleanSeoValue(primaryValues, fallbackValues, 'referenceArtist', ''))
+  const primaryInstrument = instruments[0] || 'Warm Instruments'
+  const secondaryInstrument = instruments[1] || 'Wide Soundscape'
+  const atmosphere = referenceArtist
+    ? `${referenceArtist} Inspired Atmosphere`
+    : `${mood} Atmosphere`
+
+  return [
+    `${genre} ${vocalStyle}`,
+    `${mood} ${primaryInstrument} Melodies`,
+    atmosphere,
+    `Clean Mix & ${secondaryInstrument}`,
+    'Original Wide Soundscape',
+  ]
+}
+
+function createDescriptionHashtags(genre, mood, fallbackValues) {
+  const englishGenre = cleanTitleValue(removeAiReferences(getValue(fallbackValues, 'genre', genre)) || genre)
+  const englishMood = cleanTitleValue(removeAiReferences(getValue(fallbackValues, 'mood', mood)) || mood)
+
+  return [
+    createHashtag(englishGenre, '음악'),
+    createHashtag(englishMood, '감성음악'),
+    createHashtag(genre, '음악'),
+    createHashtag(mood, '플레이리스트'),
+    '#Instrumental',
+  ]
+    .filter((tag, index, allTags) => allTags.indexOf(tag) === index)
+    .join(' ')
+}
+
+function createYoutubeDescription(primaryValues, fallbackValues) {
+  const promptText = `${createPrompt(primaryValues)} ${createPrompt(fallbackValues)}`
+  const emoji = getTitleEmoji(promptText)
+  const genre = getCleanSeoValue(primaryValues, fallbackValues, 'genre', '오리지널 음악')
+  const mood = getCleanSeoValue(primaryValues, fallbackValues, 'mood', '감성적인 분위기')
+  const referenceArtist = getCleanSeoValue(primaryValues, fallbackValues, 'referenceArtist', '')
+  const englishGenre = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'genre', 'Original Music'))
+  const englishMood = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'mood', 'Calm, Relaxing'))
+  const featuringItems = getFeaturingItems(primaryValues, fallbackValues)
+  const perfectForItems = getPerfectForItems(promptText)
+  const referenceLine = referenceArtist
+    ? `\n${referenceArtist}의 감성을 참고하되, 멜로디와 분위기는 완전히 새롭게 구성한 오리지널 트랙입니다.\n`
+    : ''
+
+  return `${emoji} A ${englishMood.toLowerCase()} ${englishGenre} track shaped for a cinematic and immersive listening moment.
+
+${mood}와 ${genre}의 결을 담아,
+조용히 흘러가는 장면과 감정의 흐름을 표현한 오리지널 음악입니다.
+${referenceLine}
+${emoji} Featuring
+${featuringItems.map((item) => `• ${item}`).join('\n')}
+
+🎧 Perfect For
+${perfectForItems.map((item) => `• ${item}`).join('\n')}
+
+${genre}의 색감과 ${mood}의 분위기를 떠올리며 제작한 트랙입니다.
+작업, 공부, 드라이브, 휴식처럼 음악이 자연스럽게 배경이 되는 순간에 잘 어울립니다.
+
+With warm textures, detailed production, and an original atmosphere, this track is perfect for listeners looking for a fresh soundtrack, relaxing BGM, or a mood-based playlist.
+
+${createDescriptionHashtags(genre, mood, fallbackValues)}`
+}
+
+function createYoutubeMetadata(primaryValues, fallbackValues) {
+  const title = createVideoTitle(primaryValues, fallbackValues)
+  const description = createYoutubeDescription(primaryValues, fallbackValues)
+  const tags = createTagPhrases(primaryValues, fallbackValues)
 
   return { title, description, tags: limitTags(tags) }
 }
@@ -397,7 +634,7 @@ function App() {
           <article className="metadata-card">
             <div className="metadata-heading">
               <h3>영상 제목</h3>
-              <button type="button" onClick={() => copyText(youtubeMetadata.title, 'Title copied!')}>
+              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.title, 'Title copied!')}>
                 Copy
               </button>
             </div>
@@ -407,7 +644,7 @@ function App() {
           <article className="metadata-card">
             <div className="metadata-heading">
               <h3>태그</h3>
-              <button type="button" onClick={() => copyText(youtubeMetadata.tags, 'Tags copied!')}>
+              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.tags, 'Tags copied!')}>
                 Copy
               </button>
             </div>
@@ -417,7 +654,7 @@ function App() {
           <article className="metadata-card metadata-card-wide">
             <div className="metadata-heading">
               <h3>영상 본문</h3>
-              <button type="button" onClick={() => copyText(youtubeMetadata.description, 'Description copied!')}>
+              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.description, 'Description copied!')}>
                 Copy
               </button>
             </div>

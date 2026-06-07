@@ -333,15 +333,14 @@ textarea:focus {
 }
 
 .metadata-heading button {
-  border: 0;
-  background: transparent;
-  color: #aaa9bd;
   font-size: 0.74rem;
-  font-weight: 700;
 }
 
-.metadata-heading button:hover {
-  color: #fff;
+.metadata-heading .metadata-copy-button {
+  width: auto;
+  min-width: 70px;
+  min-height: 34px;
+  padding: 0 13px;
 }
 
 .metadata-card p {
