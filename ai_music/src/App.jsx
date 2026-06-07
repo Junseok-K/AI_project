@@ -11,10 +11,21 @@ const fields = [
   { key: 'referenceArtist', label: '참고 아티스트', placeholder: '예: The Weeknd' },
 ]
 
+const youtubeOrderOptions = [
+  { value: 'relevance', label: '관련도' },
+  { value: 'date', label: '최신순' },
+  { value: 'viewCount', label: '조회수순' },
+]
+
 const defaultStructure = 'intro, verse, chorus, bridge, outro'
 const initialValues = {
   ...Object.fromEntries(fields.map(({ key }) => [key, ''])),
   structure: defaultStructure,
+}
+const initialYoutubeSearchValues = {
+  query: '',
+  order: 'relevance',
+  maxResults: '10',
 }
 const koreanPattern = /[\u3131-\u318e\uac00-\ud7a3]/
 const numberOnlyPattern = /^\d+(?:\.\d+)?$/
@@ -117,6 +128,18 @@ function formatKoreanLength(value) {
 function createHashtag(text, fallback) {
   const compactText = text.replace(/[^\p{L}\p{N}]/gu, '')
   return `#${compactText || fallback}`
+}
+
+function formatPublishedDate(value) {
+  if (!value) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value))
 }
 
 function removeAiReferences(value) {
@@ -436,10 +459,15 @@ const copyIcon = (
 )
 
 function App() {
+  const [activeTab, setActiveTab] = useState('text')
   const [values, setValues] = useState(initialValues)
   const [translatedValues, setTranslatedValues] = useState(initialValues)
   const [isTranslating, setIsTranslating] = useState(false)
   const [copyMessage, setCopyMessage] = useState('')
+  const [youtubeSearchValues, setYoutubeSearchValues] = useState(initialYoutubeSearchValues)
+  const [youtubeVideos, setYoutubeVideos] = useState([])
+  const [youtubeSearchStatus, setYoutubeSearchStatus] = useState('idle')
+  const [youtubeSearchMessage, setYoutubeSearchMessage] = useState('')
   const messageTimeout = useRef(null)
   const normalizedInputValues = useMemo(() => normalizeValues(values), [values])
   const normalizedValues = useMemo(() => normalizeValues(translatedValues), [translatedValues])
@@ -503,6 +531,13 @@ function App() {
     }))
   }
 
+  const handleYoutubeSearchChange = ({ target }) => {
+    setYoutubeSearchValues((currentValues) => ({
+      ...currentValues,
+      [target.name]: target.value,
+    }))
+  }
+
   const showMessage = (message) => {
     clearTimeout(messageTimeout.current)
     setCopyMessage(message)
@@ -531,15 +566,75 @@ function App() {
     setCopyMessage('')
   }
 
+  const searchYoutubeVideos = async (event) => {
+    event.preventDefault()
+
+    if (!youtubeSearchValues.query.trim()) {
+      setYoutubeVideos([])
+      setYoutubeSearchStatus('error')
+      setYoutubeSearchMessage('검색어를 입력해 주세요.')
+      return
+    }
+
+    const params = new URLSearchParams({
+      query: youtubeSearchValues.query.trim(),
+      order: youtubeSearchValues.order,
+      maxResults: youtubeSearchValues.maxResults,
+    })
+
+    setYoutubeSearchStatus('loading')
+    setYoutubeSearchMessage('')
+
+    try {
+      const response = await fetch(`/api/youtube?${params}`)
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data.message || 'YouTube 영상을 불러오지 못했습니다.')
+      }
+
+      setYoutubeVideos(data.items || [])
+
+      if (!data.items?.length) {
+        setYoutubeSearchStatus('empty')
+        setYoutubeSearchMessage('검색 결과가 없습니다. 검색어 또는 정렬 기준을 바꿔보세요.')
+        return
+      }
+
+      setYoutubeSearchStatus('success')
+      setYoutubeSearchMessage(`${data.items.length}개의 영상을 찾았습니다.`)
+    } catch (error) {
+      setYoutubeVideos([])
+      setYoutubeSearchStatus('error')
+      setYoutubeSearchMessage(error.message)
+    }
+  }
+
   return (
     <main className="page-shell">
+      <nav className="top-tabs" aria-label="Workspace tabs">
+        <button
+          className={`tab-button${activeTab === 'text' ? ' active' : ''}`}
+          onClick={() => setActiveTab('text')}
+          type="button"
+        >
+          TEXT
+        </button>
+        <button
+          className={`tab-button${activeTab === 'image' ? ' active' : ''}`}
+          onClick={() => setActiveTab('image')}
+          type="button"
+        >
+          IMAGE
+        </button>
+      </nav>
+
+      {activeTab === 'text' ? (
+        <>
       <section className="hero">
         <p className="eyebrow">AI MUSIC WORKSPACE</p>
         <h1>Suno Prompt Generator</h1>
-        <p className="hero-copy">
-          원하는 음악의 요소를 입력하면 Suno AI에 바로 사용할 수 있는
-          프롬프트를 실시간으로 만들어 드립니다.
-        </p>
+        <p className="hero-copy">원하는 음악의 요소를 입력하면 Suno AI에 바로 사용할 수 있는 프롬프트를 실시간으로 만들어 드립니다.</p>
       </section>
 
       <section className="workspace" aria-label="Suno prompt generator">
@@ -666,6 +761,88 @@ function App() {
           {copyMessage}
         </p>
       </section>
+        </>
+      ) : (
+        <section className="youtube-search-panel panel" aria-label="YouTube video search">
+          <div className="section-heading">
+            <div>
+              <p className="section-kicker">IMAGE SEARCH</p>
+              <h2>유튜브 영상 조회</h2>
+            </div>
+          </div>
+
+          <form className="youtube-search-form" onSubmit={searchYoutubeVideos}>
+            <label className="field search-query-field">
+              <span>검색어</span>
+              <input
+                name="query"
+                onChange={handleYoutubeSearchChange}
+                placeholder="예: city pop night drive"
+                type="text"
+                value={youtubeSearchValues.query}
+              />
+            </label>
+
+            <label className="field">
+              <span>정렬 기준</span>
+              <select name="order" onChange={handleYoutubeSearchChange} value={youtubeSearchValues.order}>
+                {youtubeOrderOptions.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>최대 조회 개수</span>
+              <input
+                max="50"
+                min="1"
+                name="maxResults"
+                onChange={handleYoutubeSearchChange}
+                type="number"
+                value={youtubeSearchValues.maxResults}
+              />
+            </label>
+
+            <button className="button button-primary youtube-search-button" disabled={youtubeSearchStatus === 'loading'} type="submit">
+              {youtubeSearchStatus === 'loading' ? 'Searching...' : 'Search Videos'}
+            </button>
+          </form>
+
+          <p className={`youtube-search-message ${youtubeSearchStatus}`} aria-live="polite">
+            {youtubeSearchMessage}
+          </p>
+
+          <div className="video-results">
+            {youtubeVideos.map((video) => (
+              <article className="video-card" key={video.id}>
+                <a className="video-thumbnail-link" href={video.url} rel="noreferrer" target="_blank">
+                  {video.thumbnail ? (
+                    <img alt="" className="video-thumbnail" src={video.thumbnail} />
+                  ) : (
+                    <span className="video-thumbnail-placeholder" />
+                  )}
+                </a>
+
+                <div className="video-content">
+                  <a className="video-title" href={video.url} rel="noreferrer" target="_blank">
+                    {video.title}
+                  </a>
+                  <p className="video-meta">
+                    {video.channelTitle} · {formatPublishedDate(video.publishedAt)}
+                  </p>
+                  <p className="video-description">{video.description || '설명 없음'}</p>
+                  <a className="video-link" href={video.url} rel="noreferrer" target="_blank">
+                    YouTube에서 보기
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   )
 }
