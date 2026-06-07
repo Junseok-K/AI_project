@@ -1,5 +1,0 @@
-{
-  "installCommand": "npm --prefix ../ai_music install",
-  "buildCommand": "npm --prefix ../ai_music run build",
-  "outputDirectory": "../ai_music/dist"
-}
