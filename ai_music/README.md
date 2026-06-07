@@ -14,13 +14,8 @@ npm run dev
 
 터미널에 표시되는 로컬 주소(기본값: `http://localhost:5173`)를 브라우저에서 엽니다.
 
-YouTube 영상 조회 API까지 로컬에서 함께 테스트하려면 Vercel 서버리스 함수를 같이
-실행해야 합니다.
-
-```bash
-cd ai_music
-npx vercel dev
-```
+YouTube 영상 조회 API도 로컬 Vite 개발 서버에서 `/api/youtube`로 함께
+테스트할 수 있습니다.
 
 ## 프로덕션 빌드
 
@@ -47,7 +42,7 @@ YouTube Data API v3 호출과 API Key 로딩은 서버리스 함수에서 처리
 
 ### API Key 설정
 
-API Key는 소스코드에 하드코딩하지 않습니다. 로컬에서는 `.env.local` 파일을
+API Key는 소스코드에 하드코딩하지 않습니다. 로컬에서는 `.env` 파일을
 만들어 다음 값을 등록합니다.
 
 ```bash

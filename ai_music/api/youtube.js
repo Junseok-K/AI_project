@@ -16,8 +16,11 @@ export default async function handler(request, response) {
   try {
     const result = await searchYouTubeVideos({
       query: request.query.query || '',
+      dateFrom: request.query.dateFrom || '',
+      dateTo: request.query.dateTo || '',
       order: request.query.order || 'relevance',
-      maxResults: request.query.maxResults || '10',
+      maxResults: request.query.maxResults || '8',
+      pageToken: request.query.pageToken || '',
     })
 
     sendJson(response, 200, result)

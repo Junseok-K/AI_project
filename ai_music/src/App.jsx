@@ -15,6 +15,8 @@ const youtubeOrderOptions = [
   { value: 'relevance', label: '관련도' },
   { value: 'date', label: '최신순' },
   { value: 'viewCount', label: '조회수순' },
+  { value: 'likeCount', label: '좋아요 순' },
+  { value: 'subscriberCount', label: '구독자 순' },
 ]
 
 const defaultStructure = 'intro, verse, chorus, bridge, outro'
@@ -22,13 +24,42 @@ const initialValues = {
   ...Object.fromEntries(fields.map(({ key }) => [key, ''])),
   structure: defaultStructure,
 }
-const initialYoutubeSearchValues = {
-  query: '',
-  order: 'relevance',
-  maxResults: '8',
-}
 const koreanPattern = /[\u3131-\u318e\uac00-\ud7a3]/
 const numberOnlyPattern = /^\d+(?:\.\d+)?$/
+const initialYoutubeResultCount = 8
+const additionalYoutubeResultCount = 4
+const videoPlaceholderCards = Array.from({ length: 4 }, (_, index) => index)
+
+function formatDateInput(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function formatDisplayDate(value) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+
+  if (!match) {
+    return ''
+  }
+
+  return `${match[1]}/${match[2]}/${match[3]}`
+}
+
+function createInitialYoutubeSearchValues() {
+  const today = new Date()
+  const oneYearAgo = new Date(today)
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+  return {
+    query: '',
+    dateFrom: formatDateInput(oneYearAgo),
+    dateTo: formatDateInput(today),
+    order: 'relevance',
+  }
+}
 
 async function translateToEnglish(text, signal) {
   const params = new URLSearchParams({
@@ -140,6 +171,23 @@ function formatPublishedDate(value) {
     month: 'short',
     day: 'numeric',
   }).format(new Date(value))
+}
+
+function formatCount(value) {
+  if (value === null || value === undefined || value === '') {
+    return null
+  }
+
+  const count = Number(value)
+
+  if (Number.isNaN(count)) {
+    return null
+  }
+
+  return new Intl.NumberFormat('ko-KR', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(count)
 }
 
 function removeAiReferences(value) {
@@ -458,17 +506,27 @@ const copyIcon = (
   </svg>
 )
 
+const calendarIcon = (
+  <svg aria-hidden="true" viewBox="0 0 24 24">
+    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+  </svg>
+)
+
 function App() {
   const [activeTab, setActiveTab] = useState('text')
   const [values, setValues] = useState(initialValues)
   const [translatedValues, setTranslatedValues] = useState(initialValues)
   const [isTranslating, setIsTranslating] = useState(false)
   const [copyMessage, setCopyMessage] = useState('')
-  const [youtubeSearchValues, setYoutubeSearchValues] = useState(initialYoutubeSearchValues)
+  const [youtubeSearchValues, setYoutubeSearchValues] = useState(createInitialYoutubeSearchValues)
   const [youtubeVideos, setYoutubeVideos] = useState([])
   const [youtubeSearchStatus, setYoutubeSearchStatus] = useState('idle')
   const [youtubeSearchMessage, setYoutubeSearchMessage] = useState('')
+  const [youtubeNextPageToken, setYoutubeNextPageToken] = useState('')
+  const [isLoadingMoreYoutubeVideos, setIsLoadingMoreYoutubeVideos] = useState(false)
   const messageTimeout = useRef(null)
+  const dateFromPickerRef = useRef(null)
+  const dateToPickerRef = useRef(null)
   const normalizedInputValues = useMemo(() => normalizeValues(values), [values])
   const normalizedValues = useMemo(() => normalizeValues(translatedValues), [translatedValues])
   const promptParts = useMemo(() => createPromptParts(normalizedValues), [normalizedValues])
@@ -536,6 +594,17 @@ function App() {
       ...currentValues,
       [target.name]: target.value,
     }))
+    setYoutubeNextPageToken('')
+  }
+
+  const openDatePicker = (pickerRef) => {
+    if (pickerRef.current?.showPicker) {
+      pickerRef.current.showPicker()
+      return
+    }
+
+    pickerRef.current?.focus()
+    pickerRef.current?.click()
   }
 
   const showMessage = (message) => {
@@ -566,24 +635,34 @@ function App() {
     setCopyMessage('')
   }
 
-  const searchYoutubeVideos = async (event) => {
-    event.preventDefault()
-
+  const fetchYoutubeVideos = async ({ pageToken = '', maxResults = initialYoutubeResultCount, append = false } = {}) => {
     if (!youtubeSearchValues.query.trim()) {
       setYoutubeVideos([])
+      setYoutubeNextPageToken('')
       setYoutubeSearchStatus('error')
-      setYoutubeSearchMessage('검색어를 입력해 주세요.')
+      setYoutubeSearchMessage('검색어를 입력하세요.')
       return
     }
 
     const params = new URLSearchParams({
       query: youtubeSearchValues.query.trim(),
+      dateFrom: youtubeSearchValues.dateFrom,
+      dateTo: youtubeSearchValues.dateTo,
       order: youtubeSearchValues.order,
-      maxResults: youtubeSearchValues.maxResults,
+      maxResults: String(maxResults),
     })
 
-    setYoutubeSearchStatus('loading')
-    setYoutubeSearchMessage('')
+    if (pageToken) {
+      params.set('pageToken', pageToken)
+    }
+
+    if (append) {
+      setIsLoadingMoreYoutubeVideos(true)
+    } else {
+      setYoutubeSearchStatus('loading')
+      setYoutubeSearchMessage('')
+      setYoutubeNextPageToken('')
+    }
 
     try {
       const response = await fetch(`/api/youtube?${params}`)
@@ -593,21 +672,49 @@ function App() {
         throw new Error(data.message || 'YouTube 영상을 불러오지 못했습니다.')
       }
 
-      setYoutubeVideos(data.items || [])
+      const nextItems = data.items || []
+      setYoutubeVideos((currentVideos) => (append ? [...currentVideos, ...nextItems] : nextItems))
+      setYoutubeNextPageToken(data.nextPageToken || '')
 
-      if (!data.items?.length) {
+      if (!append && !nextItems.length) {
         setYoutubeSearchStatus('empty')
         setYoutubeSearchMessage('검색 결과가 없습니다. 검색어 또는 정렬 기준을 바꿔보세요.')
         return
       }
 
       setYoutubeSearchStatus('success')
-      setYoutubeSearchMessage(`${data.items.length}개의 영상을 찾았습니다.`)
+      setYoutubeSearchMessage(
+        append
+          ? `${youtubeVideos.length + nextItems.length}개의 영상을 불러왔습니다.`
+          : `${nextItems.length}개의 영상을 찾았습니다.`,
+      )
     } catch (error) {
-      setYoutubeVideos([])
+      if (!append) {
+        setYoutubeVideos([])
+        setYoutubeNextPageToken('')
+      }
       setYoutubeSearchStatus('error')
       setYoutubeSearchMessage(error.message)
+    } finally {
+      setIsLoadingMoreYoutubeVideos(false)
     }
+  }
+
+  const searchYoutubeVideos = (event) => {
+    event.preventDefault()
+    fetchYoutubeVideos()
+  }
+
+  const loadMoreYoutubeVideos = () => {
+    if (!youtubeNextPageToken || isLoadingMoreYoutubeVideos) {
+      return
+    }
+
+    fetchYoutubeVideos({
+      pageToken: youtubeNextPageToken,
+      maxResults: additionalYoutubeResultCount,
+      append: true,
+    })
   }
 
   return (
@@ -618,23 +725,21 @@ function App() {
           onClick={() => setActiveTab('text')}
           type="button"
         >
-          TEXT
+          Prompt
         </button>
         <button
           className={`tab-button${activeTab === 'image' ? ' active' : ''}`}
           onClick={() => setActiveTab('image')}
           type="button"
         >
-          IMAGE
+          YouTube
         </button>
       </nav>
 
       {activeTab === 'text' ? (
         <>
       <section className="hero">
-        <p className="eyebrow">AI MUSIC WORKSPACE</p>
         <h1>Suno Prompt Generator</h1>
-        <p className="hero-copy">원하는 음악의 요소를 입력하면 Suno AI에 바로 사용할 수 있는 프롬프트를 실시간으로 만들어 드립니다.</p>
       </section>
 
       <section className="workspace" aria-label="Suno prompt generator">
@@ -738,22 +843,22 @@ function App() {
 
           <article className="metadata-card">
             <div className="metadata-heading">
-              <h3>태그</h3>
-              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.tags, 'Tags copied!')}>
-                Copy
-              </button>
-            </div>
-            <p>{youtubeMetadata.tags}</p>
-          </article>
-
-          <article className="metadata-card metadata-card-wide">
-            <div className="metadata-heading">
               <h3>영상 본문</h3>
               <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.description, 'Description copied!')}>
                 Copy
               </button>
             </div>
             <p className="metadata-description">{youtubeMetadata.description}</p>
+          </article>
+
+          <article className="metadata-card">
+            <div className="metadata-heading">
+              <h3>태그</h3>
+              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.tags, 'Tags copied!')}>
+                Copy
+              </button>
+            </div>
+            <p>{youtubeMetadata.tags}</p>
           </article>
         </div>
 
@@ -766,7 +871,6 @@ function App() {
         <section className="youtube-search-panel panel" aria-label="YouTube video search">
           <div className="section-heading">
             <div>
-              <p className="section-kicker">IMAGE SEARCH</p>
               <h2>유튜브 영상 조회</h2>
             </div>
           </div>
@@ -777,10 +881,47 @@ function App() {
               <input
                 name="query"
                 onChange={handleYoutubeSearchChange}
-                placeholder="예: city pop night drive"
+                placeholder="검색어를 입력하세요."
                 type="text"
                 value={youtubeSearchValues.query}
               />
+            </label>
+
+            <label className="field date-range-field">
+              <span>기간 설정</span>
+              <div className="date-range-inputs">
+                <div className="date-display-field">
+                  <input aria-label="검색 시작일" readOnly type="text" value={formatDisplayDate(youtubeSearchValues.dateFrom)} />
+                  <button aria-label="검색 시작일 선택" className="calendar-button" onClick={() => openDatePicker(dateFromPickerRef)} type="button">
+                    {calendarIcon}
+                  </button>
+                  <input
+                    className="native-date-input"
+                    name="dateFrom"
+                    onChange={handleYoutubeSearchChange}
+                    ref={dateFromPickerRef}
+                    tabIndex={-1}
+                    type="date"
+                    value={youtubeSearchValues.dateFrom}
+                  />
+                </div>
+                <span aria-hidden="true">~</span>
+                <div className="date-display-field">
+                  <input aria-label="검색 종료일" readOnly type="text" value={formatDisplayDate(youtubeSearchValues.dateTo)} />
+                  <button aria-label="검색 종료일 선택" className="calendar-button" onClick={() => openDatePicker(dateToPickerRef)} type="button">
+                    {calendarIcon}
+                  </button>
+                  <input
+                    className="native-date-input"
+                    name="dateTo"
+                    onChange={handleYoutubeSearchChange}
+                    ref={dateToPickerRef}
+                    tabIndex={-1}
+                    type="date"
+                    value={youtubeSearchValues.dateTo}
+                  />
+                </div>
+              </div>
             </label>
 
             <label className="field">
@@ -794,20 +935,8 @@ function App() {
               </select>
             </label>
 
-            <label className="field">
-              <span>최대 조회 개수</span>
-              <input
-                max="50"
-                min="1"
-                name="maxResults"
-                onChange={handleYoutubeSearchChange}
-                type="number"
-                value={youtubeSearchValues.maxResults}
-              />
-            </label>
-
             <button className="button button-primary youtube-search-button" disabled={youtubeSearchStatus === 'loading'} type="submit">
-              {youtubeSearchStatus === 'loading' ? 'Searching...' : 'Search Videos'}
+              {youtubeSearchStatus === 'loading' ? '조회 중...' : '조회'}
             </button>
           </form>
 
@@ -816,6 +945,18 @@ function App() {
           </p>
 
           <div className="video-results">
+            {youtubeSearchStatus === 'idle' && youtubeVideos.length === 0
+              ? videoPlaceholderCards.map((placeholderId) => (
+                  <article className="video-card video-card-placeholder" key={placeholderId} aria-hidden="true">
+                    <span className="video-thumbnail-placeholder" />
+                    <div className="video-content">
+                      <span className="video-placeholder-line title" />
+                      <span className="video-placeholder-line" />
+                      <span className="video-placeholder-line short" />
+                    </div>
+                  </article>
+                ))
+              : null}
             {youtubeVideos.map((video) => (
               <article className="video-card" key={video.id}>
                 <a className="video-thumbnail-link" href={video.url} rel="noreferrer" target="_blank">
@@ -833,13 +974,29 @@ function App() {
                   <p className="video-meta">
                     {video.channelTitle} · {formatPublishedDate(video.publishedAt)}
                   </p>
-                  <p className="video-description">{video.description || '설명 없음'}</p>
+                  <div className="video-stats" aria-label="YouTube video statistics">
+                    <span>조회수 {formatCount(video.viewCount) || '-'}회</span>
+                    <span>좋아요 {formatCount(video.likeCount) || '-'}</span>
+                    <span>구독자 {formatCount(video.subscriberCount) || '-'}</span>
+                  </div>
                   <a className="video-link" href={video.url} rel="noreferrer" target="_blank">
                     YouTube에서 보기
                   </a>
                 </div>
               </article>
             ))}
+          </div>
+          <div className="youtube-load-more">
+            {youtubeSearchStatus === 'success' && youtubeNextPageToken ? (
+              <button
+                className="button button-primary youtube-load-more-button"
+                disabled={isLoadingMoreYoutubeVideos}
+                onClick={loadMoreYoutubeVideos}
+                type="button"
+              >
+                {isLoadingMoreYoutubeVideos ? '불러오는 중...' : '더 보기'}
+              </button>
+            ) : null}
           </div>
         </section>
       )}

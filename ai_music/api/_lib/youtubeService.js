@@ -1,6 +1,7 @@
 import { getYouTubeConfig } from './youtubeConfig.js'
 
-const ORDER_VALUES = new Set(['relevance', 'date', 'viewCount'])
+const ORDER_VALUES = new Set(['relevance', 'date', 'viewCount', 'likeCount', 'subscriberCount'])
+const YOUTUBE_SEARCH_ORDER_VALUES = new Set(['relevance', 'date', 'viewCount'])
 
 function clampMaxResults(value) {
   const parsedValue = Number.parseInt(value, 10)
@@ -35,28 +36,91 @@ function parseYouTubeError(data, statusCode) {
   return error
 }
 
-export async function searchYouTubeVideos({ query, order = 'relevance', maxResults = 10 }) {
+function parseDateInput(value, endOfDay = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) {
+    return null
+  }
+
+  const suffix = endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z'
+  const date = new Date(`${value}${suffix}`)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date.toISOString()
+}
+
+function toNumber(value) {
+  const number = Number(value)
+  return Number.isNaN(number) ? 0 : number
+}
+
+function sortVideos(items, order) {
+  if (order === 'date') {
+    return [...items].sort((firstItem, secondItem) => new Date(secondItem.publishedAt) - new Date(firstItem.publishedAt))
+  }
+
+  if (order === 'viewCount') {
+    return [...items].sort((firstItem, secondItem) => toNumber(secondItem.viewCount) - toNumber(firstItem.viewCount))
+  }
+
+  if (order === 'likeCount') {
+    return [...items].sort((firstItem, secondItem) => toNumber(secondItem.likeCount) - toNumber(firstItem.likeCount))
+  }
+
+  if (order === 'subscriberCount') {
+    return [...items].sort((firstItem, secondItem) => toNumber(secondItem.subscriberCount) - toNumber(firstItem.subscriberCount))
+  }
+
+  return items
+}
+
+export async function searchYouTubeVideos({
+  query,
+  order = 'relevance',
+  maxResults = 10,
+  dateFrom = '',
+  dateTo = '',
+  pageToken = '',
+}) {
   const normalizedQuery = query.trim()
   const normalizedOrder = ORDER_VALUES.has(order) ? order : 'relevance'
+  const youtubeSearchOrder = YOUTUBE_SEARCH_ORDER_VALUES.has(normalizedOrder) ? normalizedOrder : 'relevance'
   const normalizedMaxResults = clampMaxResults(maxResults)
+  const publishedAfter = parseDateInput(dateFrom)
+  const publishedBefore = parseDateInput(dateTo, true)
 
   if (!normalizedQuery) {
     const error = new Error('Search query is required')
     error.statusCode = 400
     error.code = 'QUERY_REQUIRED'
-    error.userMessage = '검색어를 입력해 주세요.'
+    error.userMessage = '검색어를 입력하세요.'
     throw error
   }
 
   const { apiKey, endpoint } = getYouTubeConfig()
+  const youtubeApiBaseUrl = endpoint.replace(/\/search$/, '')
   const params = new URLSearchParams({
     part: 'snippet',
     type: 'video',
     q: normalizedQuery,
-    order: normalizedOrder,
+    order: youtubeSearchOrder,
     maxResults: String(normalizedMaxResults),
     key: apiKey,
   })
+
+  if (pageToken) {
+    params.set('pageToken', pageToken)
+  }
+
+  if (publishedAfter) {
+    params.set('publishedAfter', publishedAfter)
+  }
+
+  if (publishedBefore) {
+    params.set('publishedBefore', publishedBefore)
+  }
 
   const response = await fetch(`${endpoint}?${params}`)
   const data = await response.json().catch(() => ({}))
@@ -65,18 +129,90 @@ export async function searchYouTubeVideos({ query, order = 'relevance', maxResul
     throw parseYouTubeError(data, response.status)
   }
 
+  const searchItems = data.items || []
+  const videoIds = searchItems.map((item) => item.id.videoId).filter(Boolean)
+  const channelIds = [...new Set(searchItems.map((item) => item.snippet.channelId).filter(Boolean))]
+  const [videoStatistics, channelStatistics] = await Promise.all([
+    fetchVideoStatistics({ apiKey, baseUrl: youtubeApiBaseUrl, videoIds }),
+    fetchChannelStatistics({ apiKey, baseUrl: youtubeApiBaseUrl, channelIds }),
+  ])
+
+  const items = searchItems.map((item) => ({
+    id: item.id.videoId,
+    title: item.snippet.title,
+    channelId: item.snippet.channelId,
+    channelTitle: item.snippet.channelTitle,
+    publishedAt: item.snippet.publishedAt,
+    description: item.snippet.description,
+    thumbnail:
+      item.snippet.thumbnails?.medium?.url ||
+      item.snippet.thumbnails?.default?.url ||
+      '',
+    viewCount: videoStatistics.get(item.id.videoId)?.viewCount || null,
+    likeCount: videoStatistics.get(item.id.videoId)?.likeCount || null,
+    subscriberCount: channelStatistics.get(item.snippet.channelId)?.subscriberCount || null,
+    url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+  }))
+
   return {
-    items: (data.items || []).map((item) => ({
-      id: item.id.videoId,
-      title: item.snippet.title,
-      channelTitle: item.snippet.channelTitle,
-      publishedAt: item.snippet.publishedAt,
-      description: item.snippet.description,
-      thumbnail:
-        item.snippet.thumbnails?.medium?.url ||
-        item.snippet.thumbnails?.default?.url ||
-        '',
-      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-    })),
+    nextPageToken: data.nextPageToken || '',
+    items: sortVideos(items, normalizedOrder),
   }
+}
+
+async function fetchVideoStatistics({ apiKey, baseUrl, videoIds }) {
+  if (!videoIds.length) {
+    return new Map()
+  }
+
+  const params = new URLSearchParams({
+    part: 'statistics',
+    id: videoIds.join(','),
+    key: apiKey,
+  })
+  const response = await fetch(`${baseUrl}/videos?${params}`)
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw parseYouTubeError(data, response.status)
+  }
+
+  return new Map(
+    (data.items || []).map((item) => [
+      item.id,
+      {
+        viewCount: item.statistics?.viewCount || null,
+        likeCount: item.statistics?.likeCount || null,
+      },
+    ]),
+  )
+}
+
+async function fetchChannelStatistics({ apiKey, baseUrl, channelIds }) {
+  if (!channelIds.length) {
+    return new Map()
+  }
+
+  const params = new URLSearchParams({
+    part: 'statistics',
+    id: channelIds.join(','),
+    key: apiKey,
+  })
+  const response = await fetch(`${baseUrl}/channels?${params}`)
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw parseYouTubeError(data, response.status)
+  }
+
+  return new Map(
+    (data.items || []).map((item) => [
+      item.id,
+      {
+        subscriberCount: item.statistics?.hiddenSubscriberCount
+          ? null
+          : item.statistics?.subscriberCount || null,
+      },
+    ]),
+  )
 }

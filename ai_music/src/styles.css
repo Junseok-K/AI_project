@@ -97,7 +97,7 @@ h2 {
 h1 {
   margin-top: 12px;
   color: #fff;
-  font-size: 4.5rem;
+  font-size: 3.6rem;
   letter-spacing: -0.08em;
   line-height: 1;
   white-space: nowrap;
@@ -116,7 +116,7 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1.38fr) minmax(330px, 0.82fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel {
@@ -133,8 +133,11 @@ h1 {
 }
 
 .result-panel {
+  display: flex;
+  flex-direction: column;
   position: sticky;
   top: 20px;
+  height: 100%;
 }
 
 .section-heading {
@@ -190,6 +193,16 @@ textarea {
 input {
   height: 45px;
   padding: 0 13px;
+}
+
+input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(1);
+  opacity: 0.9;
 }
 
 select {
@@ -276,6 +289,7 @@ textarea:focus {
 }
 
 .prompt-box {
+  flex: 1;
   min-height: 270px;
   border: 1px solid rgba(169, 138, 255, 0.19);
   border-radius: 14px;
@@ -347,7 +361,7 @@ textarea:focus {
 
 .metadata-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -356,10 +370,6 @@ textarea:focus {
   border-radius: 14px;
   padding: 17px;
   background: rgba(7, 7, 15, 0.27);
-}
-
-.metadata-card-wide {
-  grid-column: 1 / -1;
 }
 
 .metadata-heading {
@@ -409,9 +419,72 @@ textarea:focus {
 
 .youtube-search-form {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(160px, 0.28fr) minmax(140px, 0.22fr) minmax(150px, 0.22fr);
+  grid-template-columns: minmax(240px, 1fr) minmax(280px, 0.7fr) minmax(140px, 0.24fr) minmax(140px, 0.2fr);
   gap: 14px;
   align-items: end;
+}
+
+.date-range-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.date-display-field {
+  position: relative;
+}
+
+.date-display-field input[readonly] {
+  padding-right: 42px;
+}
+
+.date-range-inputs span {
+  color: #8f8da0;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.calendar-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-flex;
+  width: 33px;
+  height: 33px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  transform: translateY(-50%);
+}
+
+.calendar-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.calendar-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.native-date-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.native-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
 .youtube-search-button {
@@ -479,8 +552,33 @@ textarea:focus {
   height: 100%;
 }
 
+.video-card-placeholder .video-thumbnail-placeholder {
+  border-radius: 10px;
+  aspect-ratio: 16 / 9;
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .video-content {
   min-width: 0;
+}
+
+.video-placeholder-line {
+  display: block;
+  width: 82%;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 9px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.video-placeholder-line.title {
+  width: 100%;
+  height: 14px;
+  margin-top: 0;
+}
+
+.video-placeholder-line.short {
+  width: 56%;
 }
 
 .video-title {
@@ -492,7 +590,7 @@ textarea:focus {
   line-height: 1.4;
   text-decoration: none;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .video-title:hover,
@@ -506,15 +604,15 @@ textarea:focus {
   font-size: 0.78rem;
 }
 
-.video-description {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 10px 0 0;
+.video-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 10px;
   color: #c5c3d4;
   font-size: 0.8rem;
-  line-height: 1.6;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .video-link {
@@ -524,6 +622,28 @@ textarea:focus {
   font-size: 0.82rem;
   font-weight: 800;
   text-decoration: none;
+}
+
+.youtube-load-more {
+  min-height: 24px;
+  margin-top: 14px;
+  color: #aaa9bd;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.youtube-load-more-button {
+  width: auto;
+  min-width: 132px;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(7, 7, 15, 0.27);
+  padding: 0 22px;
+  font-size: 0.98rem;
+}
+
+.youtube-load-more-button:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(7, 7, 15, 0.38);
 }
 
 @media (max-width: 860px) {
@@ -537,6 +657,7 @@ textarea:focus {
 
   .result-panel {
     position: static;
+    height: auto;
   }
 
   .prompt-box {
@@ -548,6 +669,7 @@ textarea:focus {
   }
 
   .search-query-field,
+  .date-range-field,
   .youtube-search-button {
     grid-column: 1 / -1;
   }
@@ -591,10 +713,6 @@ textarea:focus {
 
   .metadata-grid {
     grid-template-columns: 1fr;
-  }
-
-  .metadata-card-wide {
-    grid-column: auto;
   }
 
   .youtube-search-panel {
