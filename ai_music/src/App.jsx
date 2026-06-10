@@ -19,10 +19,92 @@ const youtubeOrderOptions = [
   { value: 'subscriberCount', label: '구독자 순' },
 ]
 
+const youtubeDurationOptions = [
+  { value: 'any', label: '전체' },
+  { value: 'short', label: '4분 미만' },
+  { value: 'medium', label: '4분~20분' },
+  { value: 'long', label: '20분 초과' },
+]
+
+const youtubeDefinitionOptions = [
+  { value: 'any', label: '전체' },
+  { value: 'high', label: 'HD' },
+  { value: 'standard', label: 'SD' },
+]
+
+const youtubeCaptionOptions = [
+  { value: 'any', label: '전체' },
+  { value: 'closedCaption', label: '자막 있음' },
+  { value: 'none', label: '자막 없음' },
+]
+
+const youtubeSafeSearchOptions = [
+  { value: 'moderate', label: '보통' },
+  { value: 'strict', label: '엄격' },
+  { value: 'none', label: '사용 안 함' },
+]
+
+const genreGroups = [
+  {
+    label: 'Pop (팝)',
+    subgenres: ['Pop', 'Dance Pop', 'Synth Pop', 'Dream Pop', 'Indie Pop', 'Electropop', 'K-Pop', 'J-Pop', 'Teen Pop', 'Pop Rock'],
+  },
+  {
+    label: 'Rock (록)',
+    subgenres: ['Rock', 'Classic Rock', 'Hard Rock', 'Alternative Rock', 'Indie Rock', 'Progressive Rock', 'Punk Rock', 'Garage Rock', 'Psychedelic Rock', 'Folk Rock', 'Grunge', 'Post Rock', 'Shoegaze'],
+  },
+  {
+    label: 'Metal (메탈)',
+    subgenres: ['Heavy Metal', 'Thrash Metal', 'Death Metal', 'Black Metal', 'Power Metal', 'Symphonic Metal', 'Doom Metal', 'Metalcore', 'Progressive Metal', 'Nu Metal'],
+  },
+  {
+    label: 'Electronic (전자음악)',
+    subgenres: ['Electronic', 'House', 'Deep House', 'Tropical House', 'Progressive House', 'Future House', 'Techno', 'Minimal Techno', 'Melodic Techno', 'Trance', 'Uplifting Trance', 'Psytrance', 'Drum & Bass', 'Liquid DnB', 'Neurofunk', 'Dubstep', 'Future Bass', 'Chillout', 'Downtempo', 'Ambient', 'Lo-fi', 'Synthwave', 'Vaporwave'],
+  },
+  {
+    label: 'Jazz (재즈)',
+    subgenres: ['Jazz', 'Swing', 'Bebop', 'Cool Jazz', 'Hard Bop', 'Modal Jazz', 'Smooth Jazz', 'Fusion', 'Latin Jazz', 'Jazz Funk', 'Acid Jazz', 'Contemporary Jazz', 'Jazztronica'],
+  },
+  {
+    label: 'Blues (블루스)',
+    subgenres: ['Delta Blues', 'Chicago Blues', 'Electric Blues', 'Country Blues', 'Blues Rock'],
+  },
+  {
+    label: 'Classical (클래식)',
+    subgenres: ['Baroque', 'Classical', 'Romantic', 'Modern Classical', 'Chamber Music', 'Symphony', 'Opera', 'Concerto', 'Piano Solo'],
+  },
+  {
+    label: 'R&B / Soul',
+    subgenres: ['R&B', 'Contemporary R&B', 'Neo Soul', 'Soul', 'Funk', 'Motown', 'Quiet Storm'],
+  },
+  {
+    label: 'Hip-Hop / Rap',
+    subgenres: ['Hip-Hop', 'Boom Bap', 'Trap', 'Drill', 'Lo-fi Hip-Hop', 'Jazz Rap', 'Conscious Rap', 'Old School Hip-Hop', 'Gangsta Rap', 'Alternative Hip-Hop'],
+  },
+  {
+    label: 'World Music',
+    subgenres: ['Bossa Nova', 'Samba', 'Tango', 'Flamenco', 'Reggae', 'Ska', 'Afrobeat', 'Klezmer', 'Celtic', 'Enka'],
+  },
+  {
+    label: 'Country / Folk',
+    subgenres: ['Country', 'Traditional Country', 'Country Pop', 'Country Rock', 'Bluegrass', 'Folk', 'Indie Folk', 'Contemporary Folk', 'Folk Pop'],
+  },
+  {
+    label: 'Soundtrack / Instrumental',
+    subgenres: ['Film Score', 'Game Music', 'Orchestral', 'Piano Instrumental', 'Acoustic Instrumental', 'Epic Music', 'Cinematic', 'Trailer Music'],
+  },
+]
+
 const defaultStructure = 'intro, verse, chorus, bridge, outro'
 const initialValues = {
   ...Object.fromEntries(fields.map(({ key }) => [key, ''])),
   structure: defaultStructure,
+}
+const initialGenreSelection = {
+  genreGroup: '',
+  subgenre: '',
+  bpm: '',
+  mood: '',
 }
 const koreanPattern = /[\u3131-\u318e\uac00-\ud7a3]/
 const numberOnlyPattern = /^\d+(?:\.\d+)?$/
@@ -58,6 +140,17 @@ function createInitialYoutubeSearchValues() {
     dateFrom: formatDateInput(oneYearAgo),
     dateTo: formatDateInput(today),
     order: 'relevance',
+    videoDuration: 'any',
+    videoDefinition: 'any',
+    videoCaption: 'any',
+    embeddable: false,
+    safeSearch: 'moderate',
+    regionCode: '',
+    relevanceLanguage: '',
+    channelId: '',
+    minViews: '',
+    minLikes: '',
+    minSubscribers: '',
   }
 }
 
@@ -137,6 +230,85 @@ function createPrompt(values) {
   return createPromptParts(values).map(({ text }) => text).join('')
 }
 
+function getGenreName(genreGroup) {
+  return genreGroup.replace(/\s*\(.+\)\s*$/, '').trim()
+}
+
+function formatBpm(value) {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return ''
+  }
+
+  return /\bbpm\b/i.test(trimmedValue) ? trimmedValue : `${trimmedValue} BPM`
+}
+
+function createGenrePromptParts(selection, translatedMood) {
+  const genre = getGenreName(selection.genreGroup)
+  const subgenre = selection.subgenre.trim()
+  const bpm = formatBpm(selection.bpm)
+  const mood = translatedMood.trim()
+  const style = subgenre || genre
+
+  if (!genre) {
+    return [{ text: '[장르]' }]
+  }
+
+  if (!subgenre && !bpm && !mood) {
+    return [{ text: genre, isFilled: true, key: 'genre' }]
+  }
+
+  if (!subgenre && bpm && !mood) {
+    return [
+      { text: bpm, isFilled: true, key: 'bpm' },
+      { text: ' ' },
+      { text: genre, isFilled: true, key: 'genre' },
+    ]
+  }
+
+  if (!mood) {
+    return [
+      { text: 'A ' },
+      { text: genre, isFilled: true, key: 'genre' },
+      { text: ' track with a distinct ' },
+      { text: style, isFilled: true, key: 'subgenre' },
+      { text: ' character' },
+      ...(bpm ? [{ text: ', ' }, { text: bpm, isFilled: true, key: 'bpm' }] : []),
+      { text: ', expressive dynamics, and polished original production.' },
+    ]
+  }
+
+  return [
+    { text: 'A ' },
+    { text: mood, isFilled: true, key: 'mood' },
+    { text: ',\n' },
+    ...(bpm ? [{ text: bpm, isFilled: true, key: 'bpm' }, { text: ' tempo,\n' }] : []),
+    { text: 'smooth ' },
+    { text: style, isFilled: true, key: 'subgenre' },
+    { text: ' groove,\n' },
+    { text: 'studio-quality production,\n' },
+    { text: 'relaxing ' },
+    { text: genre, isFilled: true, key: 'genre' },
+    { text: ' atmosphere.' },
+  ]
+}
+
+function createGenrePrompt(selection, translatedMood) {
+  return createGenrePromptParts(selection, translatedMood).map(({ text }) => text).join('')
+}
+
+function createGenreMetadataValues(selection, translatedMood = selection.mood) {
+  const genre = selection.subgenre.trim() || getGenreName(selection.genreGroup)
+
+  return {
+    ...initialValues,
+    genre,
+    bpm: formatBpm(selection.bpm),
+    mood: translatedMood,
+  }
+}
+
 function getValue(values, key, fallback) {
   return values[key].trim() || fallback
 }
@@ -190,6 +362,28 @@ function formatCount(value) {
   }).format(count)
 }
 
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined || seconds === '') {
+    return null
+  }
+
+  const duration = Number(seconds)
+
+  if (Number.isNaN(duration)) {
+    return null
+  }
+
+  const hours = Math.floor(duration / 3600)
+  const minutes = Math.floor((duration % 3600) / 60)
+  const remainingSeconds = Math.floor(duration % 60)
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+  }
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`
+}
+
 function removeAiReferences(value) {
   return value
     .replace(/suno\s*ai/gi, '')
@@ -207,6 +401,27 @@ function getCleanSeoValue(primaryValues, fallbackValues, key, fallback) {
 
 function normalizeTag(tag) {
   return removeAiReferences(tag).replace(/\s+/g, ' ').trim()
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function removeReferenceArtistText(text, primaryValues, fallbackValues) {
+  const referenceValues = [
+    primaryValues.referenceArtist.trim(),
+    fallbackValues.referenceArtist.trim(),
+  ].filter(Boolean)
+
+  return referenceValues.reduce((currentText, referenceValue) => (
+    currentText
+      .replace(new RegExp(escapeRegExp(referenceValue), 'gi'), '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\s+([,|])/g, '$1')
+      .replace(/([,|])\s*([,|])/g, '$1')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  ), text)
 }
 
 function limitTags(tags, maxLength = 500) {
@@ -299,6 +514,26 @@ function titleCase(value) {
     .join(' ')
 }
 
+function hasFinalConsonant(value) {
+  const lastCharacter = [...value.trim()].pop()
+
+  if (!lastCharacter) {
+    return false
+  }
+
+  const code = lastCharacter.charCodeAt(0)
+
+  if (code < 0xac00 || code > 0xd7a3) {
+    return false
+  }
+
+  return (code - 0xac00) % 28 !== 0
+}
+
+function joinWithWaGwa(value) {
+  return `${value}${hasFinalConsonant(value) ? '과' : '와'}`
+}
+
 function getTitleEmoji(promptText) {
   const lowerPrompt = promptText.toLowerCase()
   const emojiRules = [
@@ -325,7 +560,7 @@ function createKoreanVideoTitle(values, fallbackValues) {
       ? genre
       : `${genre} 음악`
 
-  return `${mood}와 함께하는 ${focus}`.replace('분위기와 함께하는', '분위기의')
+  return `${joinWithWaGwa(mood)} 함께하는 ${focus}`.replace('분위기와 함께하는', '분위기의')
 }
 
 function createEnglishVideoTitle(values) {
@@ -428,17 +663,13 @@ function getFeaturingItems(primaryValues, fallbackValues) {
     .map((instrument) => titleCase(removeAiReferences(instrument)))
     .filter(Boolean)
   const vocalStyle = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'vocalStyle', 'Instrumental'))
-  const referenceArtist = cleanTitleValue(getCleanSeoValue(primaryValues, fallbackValues, 'referenceArtist', ''))
   const primaryInstrument = instruments[0] || 'Warm Instruments'
   const secondaryInstrument = instruments[1] || 'Wide Soundscape'
-  const atmosphere = referenceArtist
-    ? `${referenceArtist} Inspired Atmosphere`
-    : `${mood} Atmosphere`
 
   return [
     `${genre} ${vocalStyle}`,
     `${mood} ${primaryInstrument} Melodies`,
-    atmosphere,
+    `${mood} Atmosphere`,
     `Clean Mix & ${secondaryInstrument}`,
     'Original Wide Soundscape',
   ]
@@ -461,24 +692,19 @@ function createDescriptionHashtags(genre, mood, fallbackValues) {
 
 function createYoutubeDescription(primaryValues, fallbackValues) {
   const promptText = `${createPrompt(primaryValues)} ${createPrompt(fallbackValues)}`
-  const emoji = getTitleEmoji(promptText)
   const genre = getCleanSeoValue(primaryValues, fallbackValues, 'genre', '오리지널 음악')
   const mood = getCleanSeoValue(primaryValues, fallbackValues, 'mood', '감성적인 분위기')
-  const referenceArtist = getCleanSeoValue(primaryValues, fallbackValues, 'referenceArtist', '')
   const englishGenre = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'genre', 'Original Music'))
   const englishMood = titleCase(getCleanSeoValue(fallbackValues, primaryValues, 'mood', 'Calm, Relaxing'))
   const featuringItems = getFeaturingItems(primaryValues, fallbackValues)
   const perfectForItems = getPerfectForItems(promptText)
-  const referenceLine = referenceArtist
-    ? `\n${referenceArtist}의 감성을 참고하되, 멜로디와 분위기는 완전히 새롭게 구성한 오리지널 트랙입니다.\n`
-    : ''
 
-  return `${emoji} A ${englishMood.toLowerCase()} ${englishGenre} track shaped for a cinematic and immersive listening moment.
+  return `🎵 A ${englishMood.toLowerCase()} ${englishGenre} track shaped for a cinematic and immersive listening moment.
 
 ${mood}와 ${genre}의 결을 담아,
 조용히 흘러가는 장면과 감정의 흐름을 표현한 오리지널 음악입니다.
-${referenceLine}
-${emoji} Featuring
+
+🎻 Featuring
 ${featuringItems.map((item) => `• ${item}`).join('\n')}
 
 🎧 Perfect For
@@ -497,7 +723,11 @@ function createYoutubeMetadata(primaryValues, fallbackValues) {
   const description = createYoutubeDescription(primaryValues, fallbackValues)
   const tags = createTagPhrases(primaryValues, fallbackValues)
 
-  return { title, description, tags: limitTags(tags) }
+  return {
+    title: removeReferenceArtistText(title, primaryValues, fallbackValues),
+    description: removeReferenceArtistText(description, primaryValues, fallbackValues),
+    tags: removeReferenceArtistText(limitTags(tags), primaryValues, fallbackValues),
+  }
 }
 
 const copyIcon = (
@@ -514,9 +744,13 @@ const calendarIcon = (
 
 function App() {
   const [activeTab, setActiveTab] = useState('text')
+  const [musicSettingsMode, setMusicSettingsMode] = useState('manual')
+  const [genreSelection, setGenreSelection] = useState(initialGenreSelection)
+  const [translatedGenreMood, setTranslatedGenreMood] = useState('')
   const [values, setValues] = useState(initialValues)
   const [translatedValues, setTranslatedValues] = useState(initialValues)
   const [isTranslating, setIsTranslating] = useState(false)
+  const [isGenreMoodTranslating, setIsGenreMoodTranslating] = useState(false)
   const [copyMessage, setCopyMessage] = useState('')
   const [youtubeSearchValues, setYoutubeSearchValues] = useState(createInitialYoutubeSearchValues)
   const [youtubeVideos, setYoutubeVideos] = useState([])
@@ -529,12 +763,40 @@ function App() {
   const dateToPickerRef = useRef(null)
   const normalizedInputValues = useMemo(() => normalizeValues(values), [values])
   const normalizedValues = useMemo(() => normalizeValues(translatedValues), [translatedValues])
-  const promptParts = useMemo(() => createPromptParts(normalizedValues), [normalizedValues])
-  const prompt = useMemo(() => createPrompt(normalizedValues), [normalizedValues])
-  const youtubeMetadata = useMemo(
-    () => createYoutubeMetadata(normalizedInputValues, normalizedValues),
-    [normalizedInputValues, normalizedValues],
+  const genreMetadataInputValues = useMemo(
+    () => createGenreMetadataValues(genreSelection),
+    [genreSelection],
   )
+  const genreMetadataTranslatedValues = useMemo(
+    () => createGenreMetadataValues(genreSelection, translatedGenreMood),
+    [genreSelection, translatedGenreMood],
+  )
+  const manualPromptParts = useMemo(() => createPromptParts(normalizedValues), [normalizedValues])
+  const genrePromptParts = useMemo(
+    () => createGenrePromptParts(genreSelection, translatedGenreMood),
+    [genreSelection, translatedGenreMood],
+  )
+  const promptParts = musicSettingsMode === 'genre' ? genrePromptParts : manualPromptParts
+  const prompt = useMemo(
+    () => (musicSettingsMode === 'genre'
+      ? createGenrePrompt(genreSelection, translatedGenreMood)
+      : createPrompt(normalizedValues)),
+    [genreSelection, musicSettingsMode, normalizedValues, translatedGenreMood],
+  )
+  const youtubeMetadata = useMemo(
+    () => createYoutubeMetadata(
+      musicSettingsMode === 'genre' ? genreMetadataInputValues : normalizedInputValues,
+      musicSettingsMode === 'genre' ? genreMetadataTranslatedValues : normalizedValues,
+    ),
+    [
+      genreMetadataInputValues,
+      genreMetadataTranslatedValues,
+      musicSettingsMode,
+      normalizedInputValues,
+      normalizedValues,
+    ],
+  )
+  const selectedGenreGroupData = genreGroups.find(({ label }) => label === genreSelection.genreGroup)
 
   useEffect(() => {
     return () => clearTimeout(messageTimeout.current)
@@ -582,6 +844,45 @@ function App() {
     }
   }, [values])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = setTimeout(async () => {
+      const mood = genreSelection.mood.trim()
+
+      if (!mood) {
+        setTranslatedGenreMood('')
+        setIsGenreMoodTranslating(false)
+        return
+      }
+
+      if (!koreanPattern.test(mood)) {
+        setTranslatedGenreMood(mood)
+        setIsGenreMoodTranslating(false)
+        return
+      }
+
+      setIsGenreMoodTranslating(true)
+
+      try {
+        setTranslatedGenreMood(await translateToEnglish(mood, controller.signal))
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          setTranslatedGenreMood(mood)
+          showMessage('Translation failed. Please try again.')
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsGenreMoodTranslating(false)
+        }
+      }
+    }, 350)
+
+    return () => {
+      clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [genreSelection.mood])
+
   const handleChange = ({ target }) => {
     setValues((currentValues) => ({
       ...currentValues,
@@ -589,10 +890,36 @@ function App() {
     }))
   }
 
+  const changeMusicSettingsMode = (nextMode) => {
+    setMusicSettingsMode(nextMode)
+  }
+
+  const handleGenreGroupChange = ({ target }) => {
+    setGenreSelection((currentSelection) => ({
+      ...currentSelection,
+      genreGroup: target.value,
+      subgenre: '',
+    }))
+  }
+
+  const handleSubgenreChange = ({ target }) => {
+    setGenreSelection((currentSelection) => ({
+      ...currentSelection,
+      subgenre: target.value,
+    }))
+  }
+
+  const handleGenreSelectionInputChange = ({ target }) => {
+    setGenreSelection((currentSelection) => ({
+      ...currentSelection,
+      [target.name]: target.value,
+    }))
+  }
+
   const handleYoutubeSearchChange = ({ target }) => {
     setYoutubeSearchValues((currentValues) => ({
       ...currentValues,
-      [target.name]: target.value,
+      [target.name]: target.type === 'checkbox' ? target.checked : target.value,
     }))
     setYoutubeNextPageToken('')
   }
@@ -632,6 +959,8 @@ function App() {
   const resetForm = () => {
     setValues(initialValues)
     setTranslatedValues(initialValues)
+    setGenreSelection(initialGenreSelection)
+    setTranslatedGenreMood('')
     setCopyMessage('')
   }
 
@@ -650,6 +979,17 @@ function App() {
       dateTo: youtubeSearchValues.dateTo,
       order: youtubeSearchValues.order,
       maxResults: String(maxResults),
+      videoDuration: youtubeSearchValues.videoDuration,
+      videoDefinition: youtubeSearchValues.videoDefinition,
+      videoCaption: youtubeSearchValues.videoCaption,
+      embeddable: String(youtubeSearchValues.embeddable),
+      safeSearch: youtubeSearchValues.safeSearch,
+      regionCode: youtubeSearchValues.regionCode.trim().toUpperCase(),
+      relevanceLanguage: youtubeSearchValues.relevanceLanguage.trim().toLowerCase(),
+      channelId: youtubeSearchValues.channelId.trim(),
+      minViews: youtubeSearchValues.minViews,
+      minLikes: youtubeSearchValues.minLikes,
+      minSubscribers: youtubeSearchValues.minSubscribers,
     })
 
     if (pageToken) {
@@ -747,37 +1087,111 @@ function App() {
           <div className="section-heading">
             <div>
               <p className="section-kicker">STEP 01</p>
-              <h2>음악 설정</h2>
+              <div className="settings-title-row">
+                <h2>음악 설정</h2>
+                <div className="settings-tabs" aria-label="음악 설정 방식">
+                  <button
+                    className={`settings-tab-button${musicSettingsMode === 'manual' ? ' active' : ''}`}
+                    onClick={() => changeMusicSettingsMode('manual')}
+                    type="button"
+                  >
+                    직접입력
+                  </button>
+                  <button
+                    className={`settings-tab-button${musicSettingsMode === 'genre' ? ' active' : ''}`}
+                    onClick={() => changeMusicSettingsMode('genre')}
+                    type="button"
+                  >
+                    장르선택
+                  </button>
+                </div>
+              </div>
             </div>
             <button className="button button-secondary" type="button" onClick={resetForm}>
               Reset
             </button>
           </div>
 
-          <div className="form-grid">
-            {fields.map(({ key, label, placeholder }) => (
-              <label className={key === 'structure' ? 'field field-wide' : 'field'} key={key}>
-                <span>{label}</span>
-                {key === 'structure' ? (
-                  <textarea
-                    name={key}
-                    onChange={handleChange}
-                    placeholder={placeholder}
-                    rows="3"
-                    value={values[key]}
-                  />
-                ) : (
+          {musicSettingsMode === 'manual' ? (
+            <div className="form-grid">
+              {fields.map(({ key, label, placeholder }) => (
+                <label className={key === 'structure' ? 'field field-wide' : 'field'} key={key}>
+                  <span>{label}</span>
+                  {key === 'structure' ? (
+                    <textarea
+                      name={key}
+                      onChange={handleChange}
+                      placeholder={placeholder}
+                      rows="3"
+                      value={values[key]}
+                    />
+                  ) : (
+                    <input
+                      name={key}
+                      onChange={handleChange}
+                      placeholder={placeholder}
+                      type="text"
+                      value={values[key]}
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <div className="genre-select-panel" aria-label="장르선택">
+              <div className="genre-select-grid">
+                <label className="field">
+                  <span>장르</span>
+                  <select onChange={handleGenreGroupChange} value={genreSelection.genreGroup}>
+                    <option value="">장르를 선택하세요</option>
+                    {genreGroups.map(({ label }) => (
+                      <option key={label} value={label}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>세부장르</span>
+                  <select
+                    disabled={!selectedGenreGroupData}
+                    onChange={handleSubgenreChange}
+                    value={genreSelection.subgenre}
+                  >
+                    <option value="">세부장르를 선택하세요</option>
+                    {selectedGenreGroupData?.subgenres.map((subgenre) => (
+                      <option key={subgenre} value={subgenre}>
+                        {subgenre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>BPM</span>
                   <input
-                    name={key}
-                    onChange={handleChange}
-                    placeholder={placeholder}
+                    name="bpm"
+                    onChange={handleGenreSelectionInputChange}
+                    placeholder="예: 100"
                     type="text"
-                    value={values[key]}
+                    value={genreSelection.bpm}
                   />
-                )}
-              </label>
-            ))}
-          </div>
+                </label>
+
+                <label className="field">
+                  <span>분위기</span>
+                  <input
+                    name="mood"
+                    onChange={handleGenreSelectionInputChange}
+                    placeholder="예: 몽환적이고 따뜻한"
+                    type="text"
+                    value={genreSelection.mood}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
         </div>
 
         <aside className="result-panel panel">
@@ -786,9 +1200,9 @@ function App() {
               <p className="section-kicker">STEP 02</p>
               <h2>생성된 프롬프트</h2>
             </div>
-            <span className={`live-badge${isTranslating ? ' translating' : ''}`}>
+            <span className={`live-badge${(isTranslating || isGenreMoodTranslating) ? ' translating' : ''}`}>
               <span aria-hidden="true" />
-              {isTranslating ? 'TRANSLATING' : 'LIVE'}
+              {(isTranslating || isGenreMoodTranslating) ? 'TRANSLATING' : 'LIVE'}
             </span>
           </div>
 
@@ -938,6 +1352,136 @@ function App() {
             <button className="button button-primary youtube-search-button" disabled={youtubeSearchStatus === 'loading'} type="submit">
               {youtubeSearchStatus === 'loading' ? '조회 중...' : '조회'}
             </button>
+
+            <details className="advanced-search">
+              <summary>상세검색</summary>
+              <div className="advanced-search-grid">
+                <label className="field">
+                  <span>영상 길이</span>
+                  <select name="videoDuration" onChange={handleYoutubeSearchChange} value={youtubeSearchValues.videoDuration}>
+                    {youtubeDurationOptions.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>화질</span>
+                  <select name="videoDefinition" onChange={handleYoutubeSearchChange} value={youtubeSearchValues.videoDefinition}>
+                    {youtubeDefinitionOptions.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>자막</span>
+                  <select name="videoCaption" onChange={handleYoutubeSearchChange} value={youtubeSearchValues.videoCaption}>
+                    {youtubeCaptionOptions.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>안전검색</span>
+                  <select name="safeSearch" onChange={handleYoutubeSearchChange} value={youtubeSearchValues.safeSearch}>
+                    {youtubeSafeSearchOptions.map(({ value, label }) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>지역 코드</span>
+                  <input
+                    maxLength="2"
+                    name="regionCode"
+                    onChange={handleYoutubeSearchChange}
+                    placeholder="예: KR"
+                    type="text"
+                    value={youtubeSearchValues.regionCode}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>관련 언어</span>
+                  <input
+                    maxLength="2"
+                    name="relevanceLanguage"
+                    onChange={handleYoutubeSearchChange}
+                    placeholder="예: ko"
+                    type="text"
+                    value={youtubeSearchValues.relevanceLanguage}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>채널 ID</span>
+                  <input
+                    name="channelId"
+                    onChange={handleYoutubeSearchChange}
+                    placeholder="특정 채널만 조회"
+                    type="text"
+                    value={youtubeSearchValues.channelId}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>최소 조회수</span>
+                  <input
+                    min="0"
+                    name="minViews"
+                    onChange={handleYoutubeSearchChange}
+                    placeholder="예: 10000"
+                    type="number"
+                    value={youtubeSearchValues.minViews}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>최소 좋아요</span>
+                  <input
+                    min="0"
+                    name="minLikes"
+                    onChange={handleYoutubeSearchChange}
+                    placeholder="예: 100"
+                    type="number"
+                    value={youtubeSearchValues.minLikes}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>최소 구독자</span>
+                  <input
+                    min="0"
+                    name="minSubscribers"
+                    onChange={handleYoutubeSearchChange}
+                    placeholder="예: 1000"
+                    type="number"
+                    value={youtubeSearchValues.minSubscribers}
+                  />
+                </label>
+
+                <label className="checkbox-field">
+                  <input
+                    checked={youtubeSearchValues.embeddable}
+                    name="embeddable"
+                    onChange={handleYoutubeSearchChange}
+                    type="checkbox"
+                  />
+                  <span>임베드 가능한 영상만</span>
+                </label>
+              </div>
+            </details>
           </form>
 
           <p className={`youtube-search-message ${youtubeSearchStatus}`} aria-live="polite">
@@ -965,6 +1509,9 @@ function App() {
                   ) : (
                     <span className="video-thumbnail-placeholder" />
                   )}
+                  {formatDuration(video.durationSeconds) ? (
+                    <span className="video-duration">{formatDuration(video.durationSeconds)}</span>
+                  ) : null}
                 </a>
 
                 <div className="video-content">
@@ -975,6 +1522,7 @@ function App() {
                     {video.channelTitle} · {formatPublishedDate(video.publishedAt)}
                   </p>
                   <div className="video-stats" aria-label="YouTube video statistics">
+                    <span>길이 {formatDuration(video.durationSeconds) || '-'}</span>
                     <span>조회수 {formatCount(video.viewCount) || '-'}회</span>
                     <span>좋아요 {formatCount(video.likeCount) || '-'}</span>
                     <span>구독자 {formatCount(video.subscriberCount) || '-'}</span>

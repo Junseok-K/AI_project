@@ -21,6 +21,17 @@ export default async function handler(request, response) {
       order: request.query.order || 'relevance',
       maxResults: request.query.maxResults || '8',
       pageToken: request.query.pageToken || '',
+      videoDuration: request.query.videoDuration || 'any',
+      videoDefinition: request.query.videoDefinition || 'any',
+      videoCaption: request.query.videoCaption || 'any',
+      embeddable: request.query.embeddable || '',
+      safeSearch: request.query.safeSearch || 'moderate',
+      regionCode: request.query.regionCode || '',
+      relevanceLanguage: request.query.relevanceLanguage || '',
+      channelId: request.query.channelId || '',
+      minViews: request.query.minViews || '',
+      minLikes: request.query.minLikes || '',
+      minSubscribers: request.query.minSubscribers || '',
     })
 
     sendJson(response, 200, result)

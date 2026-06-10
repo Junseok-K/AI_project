@@ -155,10 +155,61 @@ h2 {
   letter-spacing: -0.04em;
 }
 
+.settings-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 7px;
+}
+
+.settings-title-row h2 {
+  margin-top: 0;
+}
+
+.settings-tabs {
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 3px;
+  background: rgba(7, 7, 15, 0.36);
+}
+
+.settings-tab-button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: transparent;
+  color: #9493a4;
+  font-size: 0.76rem;
+  font-weight: 800;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.settings-tab-button.active {
+  background: #9473ff;
+  color: #fff;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 17px 14px;
+}
+
+.genre-select-panel {
+  min-height: 385px;
+  border: 1px dashed rgba(255, 255, 255, 0.13);
+  border-radius: 16px;
+  padding: 18px;
+  background: rgba(7, 7, 15, 0.2);
+}
+
+.genre-select-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .field {
@@ -208,6 +259,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 select {
   height: 45px;
   padding: 0 13px;
+}
+
+select:disabled {
+  cursor: not-allowed;
+  color: #6f6e7e;
+  opacity: 0.72;
 }
 
 textarea {
@@ -302,6 +359,7 @@ textarea:focus {
   color: #dad8e8;
   font-size: 0.98rem;
   line-height: 1.8;
+  white-space: pre-line;
 }
 
 .prompt-value {
@@ -424,6 +482,44 @@ textarea:focus {
   align-items: end;
 }
 
+.advanced-search {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(7, 7, 15, 0.2);
+}
+
+.advanced-search summary {
+  cursor: pointer;
+  color: #f7f7fa;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.advanced-search-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.checkbox-field {
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  gap: 9px;
+  color: #c7c6d2;
+  font-size: 0.83rem;
+  font-weight: 800;
+}
+
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: #9473ff;
+}
+
 .date-range-inputs {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -533,6 +629,7 @@ textarea:focus {
 
 .video-thumbnail-link {
   display: block;
+  position: relative;
   overflow: hidden;
   border-radius: 10px;
   aspect-ratio: 16 / 9;
@@ -550,6 +647,19 @@ textarea:focus {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.video-duration {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  border-radius: 6px;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .video-card-placeholder .video-thumbnail-placeholder {
@@ -668,6 +778,10 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .advanced-search-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .search-query-field,
   .date-range-field,
   .youtube-search-button {
@@ -707,6 +821,22 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
+  .genre-select-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-title-row {
+    gap: 10px;
+  }
+
+  .settings-tabs {
+    width: 100%;
+  }
+
+  .settings-tab-button {
+    flex: 1;
+  }
+
   .field-wide {
     grid-column: auto;
   }
@@ -721,6 +851,10 @@ textarea:focus {
   }
 
   .youtube-search-form {
+    grid-template-columns: 1fr;
+  }
+
+  .advanced-search-grid {
     grid-template-columns: 1fr;
   }
 

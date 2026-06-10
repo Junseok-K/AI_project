@@ -2,6 +2,10 @@ import { getYouTubeConfig } from './youtubeConfig.js'
 
 const ORDER_VALUES = new Set(['relevance', 'date', 'viewCount', 'likeCount', 'subscriberCount'])
 const YOUTUBE_SEARCH_ORDER_VALUES = new Set(['relevance', 'date', 'viewCount'])
+const VIDEO_DURATION_VALUES = new Set(['any', 'short', 'medium', 'long'])
+const VIDEO_DEFINITION_VALUES = new Set(['any', 'high', 'standard'])
+const VIDEO_CAPTION_VALUES = new Set(['any', 'closedCaption', 'none'])
+const SAFE_SEARCH_VALUES = new Set(['none', 'moderate', 'strict'])
 
 function clampMaxResults(value) {
   const parsedValue = Number.parseInt(value, 10)
@@ -56,6 +60,29 @@ function toNumber(value) {
   return Number.isNaN(number) ? 0 : number
 }
 
+function parseOptionalNumber(value) {
+  if (value === undefined || value === null || value === '') {
+    return null
+  }
+
+  const number = Number(value)
+  return Number.isNaN(number) ? null : number
+}
+
+function parseIsoDuration(duration) {
+  const match = duration?.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/)
+
+  if (!match) {
+    return null
+  }
+
+  const hours = Number(match[1] || 0)
+  const minutes = Number(match[2] || 0)
+  const seconds = Number(match[3] || 0)
+
+  return hours * 3600 + minutes * 60 + seconds
+}
+
 function sortVideos(items, order) {
   if (order === 'date') {
     return [...items].sort((firstItem, secondItem) => new Date(secondItem.publishedAt) - new Date(firstItem.publishedAt))
@@ -76,6 +103,24 @@ function sortVideos(items, order) {
   return items
 }
 
+function filterVideos(items, { minViews, minLikes, minSubscribers }) {
+  return items.filter((item) => {
+    if (minViews !== null && toNumber(item.viewCount) < minViews) {
+      return false
+    }
+
+    if (minLikes !== null && toNumber(item.likeCount) < minLikes) {
+      return false
+    }
+
+    if (minSubscribers !== null && toNumber(item.subscriberCount) < minSubscribers) {
+      return false
+    }
+
+    return true
+  })
+}
+
 export async function searchYouTubeVideos({
   query,
   order = 'relevance',
@@ -83,6 +128,17 @@ export async function searchYouTubeVideos({
   dateFrom = '',
   dateTo = '',
   pageToken = '',
+  videoDuration = 'any',
+  videoDefinition = 'any',
+  videoCaption = 'any',
+  embeddable = '',
+  safeSearch = 'moderate',
+  regionCode = '',
+  relevanceLanguage = '',
+  channelId = '',
+  minViews = '',
+  minLikes = '',
+  minSubscribers = '',
 }) {
   const normalizedQuery = query.trim()
   const normalizedOrder = ORDER_VALUES.has(order) ? order : 'relevance'
@@ -90,6 +146,13 @@ export async function searchYouTubeVideos({
   const normalizedMaxResults = clampMaxResults(maxResults)
   const publishedAfter = parseDateInput(dateFrom)
   const publishedBefore = parseDateInput(dateTo, true)
+  const normalizedVideoDuration = VIDEO_DURATION_VALUES.has(videoDuration) ? videoDuration : 'any'
+  const normalizedVideoDefinition = VIDEO_DEFINITION_VALUES.has(videoDefinition) ? videoDefinition : 'any'
+  const normalizedVideoCaption = VIDEO_CAPTION_VALUES.has(videoCaption) ? videoCaption : 'any'
+  const normalizedSafeSearch = SAFE_SEARCH_VALUES.has(safeSearch) ? safeSearch : 'moderate'
+  const normalizedMinViews = parseOptionalNumber(minViews)
+  const normalizedMinLikes = parseOptionalNumber(minLikes)
+  const normalizedMinSubscribers = parseOptionalNumber(minSubscribers)
 
   if (!normalizedQuery) {
     const error = new Error('Search query is required')
@@ -122,6 +185,38 @@ export async function searchYouTubeVideos({
     params.set('publishedBefore', publishedBefore)
   }
 
+  if (normalizedVideoDuration !== 'any') {
+    params.set('videoDuration', normalizedVideoDuration)
+  }
+
+  if (normalizedVideoDefinition !== 'any') {
+    params.set('videoDefinition', normalizedVideoDefinition)
+  }
+
+  if (normalizedVideoCaption !== 'any') {
+    params.set('videoCaption', normalizedVideoCaption)
+  }
+
+  if (embeddable === 'true') {
+    params.set('videoEmbeddable', 'true')
+  }
+
+  if (normalizedSafeSearch !== 'moderate') {
+    params.set('safeSearch', normalizedSafeSearch)
+  }
+
+  if (/^[A-Z]{2}$/.test(regionCode)) {
+    params.set('regionCode', regionCode)
+  }
+
+  if (/^[a-z]{2}$/.test(relevanceLanguage)) {
+    params.set('relevanceLanguage', relevanceLanguage)
+  }
+
+  if (channelId.trim()) {
+    params.set('channelId', channelId.trim())
+  }
+
   const response = await fetch(`${endpoint}?${params}`)
   const data = await response.json().catch(() => ({}))
 
@@ -132,8 +227,8 @@ export async function searchYouTubeVideos({
   const searchItems = data.items || []
   const videoIds = searchItems.map((item) => item.id.videoId).filter(Boolean)
   const channelIds = [...new Set(searchItems.map((item) => item.snippet.channelId).filter(Boolean))]
-  const [videoStatistics, channelStatistics] = await Promise.all([
-    fetchVideoStatistics({ apiKey, baseUrl: youtubeApiBaseUrl, videoIds }),
+  const [videoDetails, channelStatistics] = await Promise.all([
+    fetchVideoDetails({ apiKey, baseUrl: youtubeApiBaseUrl, videoIds }),
     fetchChannelStatistics({ apiKey, baseUrl: youtubeApiBaseUrl, channelIds }),
   ])
 
@@ -148,25 +243,34 @@ export async function searchYouTubeVideos({
       item.snippet.thumbnails?.medium?.url ||
       item.snippet.thumbnails?.default?.url ||
       '',
-    viewCount: videoStatistics.get(item.id.videoId)?.viewCount || null,
-    likeCount: videoStatistics.get(item.id.videoId)?.likeCount || null,
+    duration: videoDetails.get(item.id.videoId)?.duration || null,
+    durationSeconds: videoDetails.get(item.id.videoId)?.durationSeconds || null,
+    viewCount: videoDetails.get(item.id.videoId)?.viewCount || null,
+    likeCount: videoDetails.get(item.id.videoId)?.likeCount || null,
     subscriberCount: channelStatistics.get(item.snippet.channelId)?.subscriberCount || null,
     url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
   }))
 
   return {
     nextPageToken: data.nextPageToken || '',
-    items: sortVideos(items, normalizedOrder),
+    items: sortVideos(
+      filterVideos(items, {
+        minViews: normalizedMinViews,
+        minLikes: normalizedMinLikes,
+        minSubscribers: normalizedMinSubscribers,
+      }),
+      normalizedOrder,
+    ),
   }
 }
 
-async function fetchVideoStatistics({ apiKey, baseUrl, videoIds }) {
+async function fetchVideoDetails({ apiKey, baseUrl, videoIds }) {
   if (!videoIds.length) {
     return new Map()
   }
 
   const params = new URLSearchParams({
-    part: 'statistics',
+    part: 'statistics,contentDetails',
     id: videoIds.join(','),
     key: apiKey,
   })
@@ -183,6 +287,8 @@ async function fetchVideoStatistics({ apiKey, baseUrl, videoIds }) {
       {
         viewCount: item.statistics?.viewCount || null,
         likeCount: item.statistics?.likeCount || null,
+        duration: item.contentDetails?.duration || null,
+        durationSeconds: parseIsoDuration(item.contentDetails?.duration),
       },
     ]),
   )
