@@ -595,7 +595,7 @@ function createVideoTitle(primaryValues, fallbackValues) {
   const koreanTitle = createKoreanVideoTitle(primaryValues, fallbackValues)
   const englishTitle = createEnglishVideoTitle(fallbackValues)
 
-  return `${emoji} ${koreanTitle} | ${englishTitle}`
+  return `[playlist] ${emoji} ${koreanTitle} | ${englishTitle}`
 }
 
 function getPerfectForItems(promptText) {
@@ -758,6 +758,9 @@ function App() {
   const [youtubeSearchMessage, setYoutubeSearchMessage] = useState('')
   const [youtubeNextPageToken, setYoutubeNextPageToken] = useState('')
   const [isLoadingMoreYoutubeVideos, setIsLoadingMoreYoutubeVideos] = useState(false)
+  const [refinedYoutubeMetadata, setRefinedYoutubeMetadata] = useState(null)
+  const [metadataRefineStatus, setMetadataRefineStatus] = useState('idle')
+  const [metadataRefineMessage, setMetadataRefineMessage] = useState('')
   const messageTimeout = useRef(null)
   const dateFromPickerRef = useRef(null)
   const dateToPickerRef = useRef(null)
@@ -783,7 +786,7 @@ function App() {
       : createPrompt(normalizedValues)),
     [genreSelection, musicSettingsMode, normalizedValues, translatedGenreMood],
   )
-  const youtubeMetadata = useMemo(
+  const generatedYoutubeMetadata = useMemo(
     () => createYoutubeMetadata(
       musicSettingsMode === 'genre' ? genreMetadataInputValues : normalizedInputValues,
       musicSettingsMode === 'genre' ? genreMetadataTranslatedValues : normalizedValues,
@@ -796,11 +799,18 @@ function App() {
       normalizedValues,
     ],
   )
+  const youtubeMetadata = refinedYoutubeMetadata || generatedYoutubeMetadata
   const selectedGenreGroupData = genreGroups.find(({ label }) => label === genreSelection.genreGroup)
 
   useEffect(() => {
     return () => clearTimeout(messageTimeout.current)
   }, [])
+
+  useEffect(() => {
+    setRefinedYoutubeMetadata(null)
+    setMetadataRefineStatus('idle')
+    setMetadataRefineMessage('')
+  }, [generatedYoutubeMetadata])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -956,11 +966,47 @@ function App() {
     )
   }
 
+  const refineYoutubeMetadata = async () => {
+    setMetadataRefineStatus('loading')
+    setMetadataRefineMessage('')
+
+    try {
+      const response = await fetch('/api/refine-metadata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          inputValues: musicSettingsMode === 'genre'
+            ? genreMetadataInputValues
+            : normalizedInputValues,
+          metadata: generatedYoutubeMetadata,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data.message || '문장 검토에 실패했습니다.')
+      }
+
+      setRefinedYoutubeMetadata(data)
+      setMetadataRefineStatus('success')
+      setMetadataRefineMessage('문장을 자연스럽게 다시 다듬었습니다.')
+    } catch (error) {
+      setMetadataRefineStatus('error')
+      setMetadataRefineMessage(error.message)
+    }
+  }
+
   const resetForm = () => {
     setValues(initialValues)
     setTranslatedValues(initialValues)
     setGenreSelection(initialGenreSelection)
     setTranslatedGenreMood('')
+    setRefinedYoutubeMetadata(null)
+    setMetadataRefineStatus('idle')
+    setMetadataRefineMessage('')
     setCopyMessage('')
   }
 
@@ -1234,14 +1280,28 @@ function App() {
             <p className="section-kicker">STEP 03</p>
             <h2>YouTube 업로드 정보</h2>
           </div>
-          <button className="button button-secondary" type="button" onClick={copyAllYoutubeMetadata}>
-            {copyIcon}
-            Copy All
-          </button>
+          <div className="metadata-actions">
+            <button
+              className="button button-secondary"
+              disabled={metadataRefineStatus === 'loading'}
+              hidden
+              onClick={refineYoutubeMetadata}
+              type="button"
+            >
+              {metadataRefineStatus === 'loading' ? 'Refining...' : '자연스럽게 재생성'}
+            </button>
+            <button className="button button-secondary" type="button" onClick={copyAllYoutubeMetadata}>
+              {copyIcon}
+              Copy All
+            </button>
+          </div>
         </div>
 
         <p className="section-description">
           SEO 키워드를 반영해 한국어 중심의 영상 제목, 본문, 태그를 자동으로 구성합니다.
+        </p>
+        <p className={`metadata-refine-message ${metadataRefineStatus}`} aria-live="polite">
+          {metadataRefineMessage}
         </p>
 
         <div className="metadata-grid">

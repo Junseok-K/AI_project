@@ -47,8 +47,11 @@ API Key는 소스코드에 하드코딩하지 않습니다. 로컬에서는 `.en
 
 ```bash
 YOUTUBE_API_KEY=your_youtube_data_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-5.2
 ```
 
 Vercel 배포 환경에서는 Project Settings > Environment Variables에서
-`YOUTUBE_API_KEY`를 등록합니다. `.env*` 파일은 Git에 커밋되지 않도록
+`YOUTUBE_API_KEY`, `OPENAI_API_KEY`, 선택적으로 `OPENAI_MODEL`을 등록합니다.
+`.env*` 파일은 Git에 커밋되지 않도록
 `.gitignore`에 등록되어 있으며, `.env.example`에는 예시 값만 남깁니다.
