@@ -491,6 +491,22 @@ textarea:focus {
   line-height: 1.7;
 }
 
+.metadata-card-wide {
+  grid-column: 1 / -1;
+}
+
+.metadata-template {
+  max-height: 460px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #dad8e8;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.84rem;
+  line-height: 1.65;
+}
+
 .metadata-description {
   white-space: pre-line;
 }

@@ -730,6 +730,54 @@ function createYoutubeMetadata(primaryValues, fallbackValues) {
   }
 }
 
+function formatTemplateValues(values) {
+  return Object.entries(values)
+    .filter(([, value]) => String(value || '').trim())
+    .map(([key, value]) => `- ${key}: ${value}`)
+    .join('\n') || '- No extra input values'
+}
+
+function createChatGptMetadataTemplate({
+  prompt,
+  inputValues,
+  translatedInputValues,
+  draftMetadata,
+}) {
+  return `You are a bilingual Korean-English YouTube metadata editor for original music uploads.
+
+Use the Suno music prompt below only as source context. Do not simply reuse the same word combinations from the prompt. Create fresh, natural YouTube metadata that sounds like it was written by a human curator.
+
+[Music prompt]
+${prompt}
+
+[Original input values]
+${formatTemplateValues(inputValues)}
+
+[English/reference values]
+${formatTemplateValues(translatedInputValues)}
+
+[Current draft format to improve]
+Title:
+${draftMetadata.title}
+
+Description:
+${draftMetadata.description}
+
+Tags:
+${draftMetadata.tags}
+
+[Requirements]
+- Output exactly three sections: Title, Description, Tags.
+- Title format: [playlist] emoji Korean title | English title.
+- Make the Korean title natural and searchable, not a literal translation of the prompt.
+- Description should be polished Korean first, with short English lines where useful.
+- Keep useful blocks such as Featuring and Perfect For, but rewrite the wording naturally.
+- Tags must be comma-separated and 500 characters or less total.
+- Include Korean and English search terms, mood terms, genre terms, use-case terms, and playlist/BGM terms.
+- Do not mention AI, Suno, prompt, generated, reference artist, or copyrighted artist names.
+- Do not wrap the answer in markdown code fences.`
+}
+
 const copyIcon = (
   <svg aria-hidden="true" viewBox="0 0 24 24">
     <path d="M8 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2M6 7h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
@@ -800,6 +848,23 @@ function App() {
     ],
   )
   const youtubeMetadata = refinedYoutubeMetadata || generatedYoutubeMetadata
+  const chatGptMetadataTemplate = useMemo(
+    () => createChatGptMetadataTemplate({
+      prompt,
+      inputValues: musicSettingsMode === 'genre' ? genreMetadataInputValues : normalizedInputValues,
+      translatedInputValues: musicSettingsMode === 'genre' ? genreMetadataTranslatedValues : normalizedValues,
+      draftMetadata: youtubeMetadata,
+    }),
+    [
+      genreMetadataInputValues,
+      genreMetadataTranslatedValues,
+      musicSettingsMode,
+      normalizedInputValues,
+      normalizedValues,
+      prompt,
+      youtubeMetadata,
+    ],
+  )
   const selectedGenreGroupData = genreGroups.find(({ label }) => label === genreSelection.genreGroup)
 
   useEffect(() => {
@@ -961,9 +1026,31 @@ function App() {
 
   const copyAllYoutubeMetadata = () => {
     copyText(
-      `Title\n${youtubeMetadata.title}\n\nDescription\n${youtubeMetadata.description}\n\nTags\n${youtubeMetadata.tags}`,
-      'YouTube metadata copied!',
+      chatGptMetadataTemplate,
+      'ChatGPT template copied!',
     )
+  }
+
+  const requestMetadataInChatGpt = async () => {
+    const encodedTemplate = encodeURIComponent(chatGptMetadataTemplate)
+    const chatGptUrl = encodedTemplate.length < 7000
+      ? `https://chatgpt.com/?q=${encodedTemplate}`
+      : 'https://chatgpt.com/'
+    const chatGptWindow = window.open(chatGptUrl, '_blank', 'noopener,noreferrer')
+
+    try {
+      await navigator.clipboard.writeText(chatGptMetadataTemplate)
+      if (!chatGptWindow) {
+        window.open(chatGptUrl, '_blank', 'noopener,noreferrer')
+      }
+
+      showMessage('Template copied. ChatGPT opened.')
+    } catch {
+      if (!chatGptWindow) {
+        window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer')
+      }
+      showMessage('Copy failed. ChatGPT opened.')
+    }
   }
 
   const refineYoutubeMetadata = async () => {
@@ -1278,36 +1365,40 @@ function App() {
         <div className="section-heading">
           <div>
             <p className="section-kicker">STEP 03</p>
-            <h2>YouTube 업로드 정보</h2>
+            <h2>ChatGPT 메타데이터 템플릿</h2>
           </div>
           <div className="metadata-actions">
-            <button
-              className="button button-secondary"
-              disabled={metadataRefineStatus === 'loading'}
-              hidden
-              onClick={refineYoutubeMetadata}
-              type="button"
-            >
-              {metadataRefineStatus === 'loading' ? 'Refining...' : '자연스럽게 재생성'}
+            <button className="button button-secondary" type="button" onClick={requestMetadataInChatGpt}>
+              ChatGPT에 요청
             </button>
             <button className="button button-secondary" type="button" onClick={copyAllYoutubeMetadata}>
               {copyIcon}
-              Copy All
+              Copy Template
             </button>
           </div>
         </div>
 
         <p className="section-description">
-          SEO 키워드를 반영해 한국어 중심의 영상 제목, 본문, 태그를 자동으로 구성합니다.
+          생성된 음악 프롬프트와 현재 형식을 참고해서 ChatGPT가 새로운 영상 제목, 본문, 태그를 작성하도록 요청하는 복사/붙여넣기 템플릿입니다.
         </p>
         <p className={`metadata-refine-message ${metadataRefineStatus}`} aria-live="polite">
           {metadataRefineMessage}
         </p>
 
         <div className="metadata-grid">
+          <article className="metadata-card metadata-card-wide">
+            <div className="metadata-heading">
+              <h3>ChatGPT 복사 템플릿</h3>
+              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(chatGptMetadataTemplate, 'Template copied!')}>
+                Copy
+              </button>
+            </div>
+            <pre className="metadata-template">{chatGptMetadataTemplate}</pre>
+          </article>
+
           <article className="metadata-card">
             <div className="metadata-heading">
-              <h3>영상 제목</h3>
+              <h3>참고 제목 초안</h3>
               <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.title, 'Title copied!')}>
                 Copy
               </button>
@@ -1317,17 +1408,7 @@ function App() {
 
           <article className="metadata-card">
             <div className="metadata-heading">
-              <h3>영상 본문</h3>
-              <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.description, 'Description copied!')}>
-                Copy
-              </button>
-            </div>
-            <p className="metadata-description">{youtubeMetadata.description}</p>
-          </article>
-
-          <article className="metadata-card">
-            <div className="metadata-heading">
-              <h3>태그</h3>
+              <h3>참고 태그 초안</h3>
               <button className="button button-primary metadata-copy-button" type="button" onClick={() => copyText(youtubeMetadata.tags, 'Tags copied!')}>
                 Copy
               </button>
